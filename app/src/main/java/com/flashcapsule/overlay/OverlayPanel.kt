@@ -110,7 +110,6 @@ import com.flashcapsule.ui.CapsuleWaveform
 import com.flashcapsule.ui.capsuleAddToCalendar
 import com.flashcapsule.ui.capsuleColorOf
 import com.flashcapsule.ui.capsuleShareText
-import com.flashcapsule.ui.capsuleWebSearch
 import com.flashcapsule.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -372,7 +371,6 @@ private fun PanelContent(repo: CaptureRepository, onDismiss: () -> Unit) {
                 onDelete = { scope.launch { repo.delete(cap.id) }; editing = null },
                 onShare = { t -> capsuleShareText(context, t); editing = null },
                 onCalendar = { t -> capsuleAddToCalendar(context, t); editing = null },
-                onSearch = { t -> capsuleWebSearch(context, t); editing = null },
                 onObsidian = { scope.launch { repo.exportTo("obsidian", cap.id) }; editing = null },
                 onDismiss = { editing = null },
             )

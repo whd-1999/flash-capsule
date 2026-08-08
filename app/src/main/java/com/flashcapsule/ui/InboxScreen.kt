@@ -173,7 +173,6 @@ fun InboxScreen(
             onDelete = { vm.delete(cap.id); editing = null },
             onShare = { t -> capsuleShareText(context, t); editing = null },
             onCalendar = { t -> capsuleAddToCalendar(context, t); editing = null },
-            onSearch = { t -> capsuleWebSearch(context, t); editing = null },
             onObsidian = { vm.export("obsidian", cap.id); editing = null },
             onDismiss = { editing = null },
         )

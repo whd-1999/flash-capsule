@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.CalendarContract
+import android.text.Html
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -12,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,7 +35,6 @@ import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PriorityHigh
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -45,6 +46,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,16 +54,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.flashcapsule.model.Capsule
 import com.flashcapsule.model.CapsuleStatus
 import com.flashcapsule.model.ColorTag
 import com.flashcapsule.transcribe.TranscriptionState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 
 private val SheetBg = Color(0xFFF7F5FB)
 private val SheetText = Color(0xFF1C1B1F)
@@ -107,11 +118,100 @@ fun capsuleAddToCalendar(context: Context, text: String) {
     runCatching { context.startActivity(i) }
 }
 
-fun capsuleWebSearch(context: Context, text: String) {
+/** 用指定引擎在浏览器里搜 text。 */
+fun openSearchEngine(context: Context, engine: String, text: String) {
     if (text.isBlank()) return
-    val i = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=${Uri.encode(text)}"))
+    val base = when (engine) {
+        "google" -> "https://www.google.com/search?q="
+        "baidu" -> "https://www.baidu.com/s?wd="
+        "bing" -> "https://www.bing.com/search?q="
+        else -> "https://zh.wikipedia.org/w/index.php?search=" // wiki
+    }
+    val i = Intent(Intent.ACTION_VIEW, Uri.parse(base + Uri.encode(text)))
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(i) }
+}
+
+/** 搜索面板的四种状态。 */
+private sealed interface WebSearchUi {
+    data object Idle : WebSearchUi
+    data object Loading : WebSearchUi
+    data class Hit(val title: String, val snippet: String, val url: String) : WebSearchUi
+    data object Empty : WebSearchUi
+    data object Error : WebSearchUi
+}
+
+/** 抓取搜索摘要（Wikipedia API，零依赖、免费）。IO 线程，失败静默降级为引擎跳转。 */
+private suspend fun fetchWebSearch(query: String): WebSearchUi = withContext(Dispatchers.IO) {
+    runCatching {
+        val api = "https://zh.wikipedia.org/w/api.php?action=query&list=search" +
+            "&srsearch=${Uri.encode(query)}&format=json&utf8=1&srlimit=1&srprop=snippet"
+        val conn = (URL(api).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 8000; readTimeout = 8000
+            setRequestProperty("User-Agent", "FlashCapsule/0.11")
+        }
+        val body = conn.inputStream.bufferedReader().use { it.readText() }
+        val search = JSONObject(body).getJSONObject("query").getJSONArray("search")
+        if (search.length() == 0) {
+            WebSearchUi.Empty
+        } else {
+            val first = search.getJSONObject(0)
+            val title = first.getString("title")
+            val snippet = first.optString("snippet", "")
+                .let { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
+            WebSearchUi.Hit(title, snippet, "https://zh.wikipedia.org/wiki/${Uri.encode(title)}")
+        }
+    }.getOrElse { WebSearchUi.Error }
+}
+
+/** 原版风格的自动网络搜索：胶囊展开即拿文字去搜，底部可切引擎。 */
+@Composable
+private fun WebSearchPanel(query: String) {
+    val context = LocalContext.current
+    var ui by remember { mutableStateOf<WebSearchUi>(WebSearchUi.Idle) }
+    LaunchedEffect(query) {
+        if (query.isBlank()) { ui = WebSearchUi.Idle; return@LaunchedEffect }
+        ui = WebSearchUi.Loading
+        delay(500) // 防抖：停止输入后再搜，避免逐字请求
+        ui = fetchWebSearch(query)
+    }
+    Column {
+        Spacer(Modifier.height(12.dp))
+        Text("网络搜索", style = MaterialTheme.typography.labelMedium, color = SheetSub)
+        Spacer(Modifier.height(6.dp))
+        when (val s = ui) {
+            WebSearchUi.Idle, WebSearchUi.Loading ->
+                Text("搜索中…", style = MaterialTheme.typography.bodySmall, color = SheetSub)
+            is WebSearchUi.Hit -> {
+                Text(
+                    s.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = SheetText,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    s.snippet,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SheetSub,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            WebSearchUi.Empty ->
+                Text("没搜到词条，试试下方引擎", style = MaterialTheme.typography.bodySmall, color = SheetSub)
+            WebSearchUi.Error ->
+                Text("网络搜索失败，试试下方引擎", style = MaterialTheme.typography.bodySmall, color = SheetSub)
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("Google" to "google", "百度" to "baidu", "Bing" to "bing", "维基" to "wiki").forEach { (label, engine) ->
+                TextButton(
+                    onClick = { openSearchEngine(context, engine, query) },
+                    contentPadding = PaddingValues(horizontal = 10.dp),
+                ) { Text(label, style = MaterialTheme.typography.labelSmall) }
+            }
+        }
+    }
 }
 
 @Composable
@@ -173,7 +273,6 @@ fun CapsuleSheet(
     onDelete: () -> Unit,
     onShare: (String) -> Unit,
     onCalendar: (String) -> Unit,
-    onSearch: (String) -> Unit,
     onObsidian: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -236,14 +335,14 @@ fun CapsuleSheet(
                     }
                 }
                 Spacer(Modifier.height(14.dp))
-                // 5 个操作图标一行；取消/保存移到第二行，避免 340dp 宽度下一行塞不下被裁掉
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { onShare(text) }) { Icon(Icons.Filled.Share, "分享") }
                     IconButton(onClick = onObsidian) { Icon(Icons.Filled.Description, "落 Obsidian") }
                     IconButton(onClick = { onCalendar(text) }) { Icon(Icons.Filled.Event, "转日历") }
-                    IconButton(onClick = { onSearch(text) }) { Icon(Icons.Filled.Search, "搜索") }
                     IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, "删除", tint = SheetDelete) }
                 }
+                // 原版：胶囊下方自动出现网络搜索结果面板
+                if (text.isNotBlank()) WebSearchPanel(text)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
