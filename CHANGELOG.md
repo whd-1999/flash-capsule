@@ -11,6 +11,11 @@
 - ContentProvider 读接口（供自动化脚本拉取）
 - 把手拖到左缘 / 边缘位置记忆；面板内直接编辑/删除
 
+## [0.3.2] - 2026-08-08
+### Changed
+- 边缘面板从"透明 Activity"改为**真正的悬浮窗（overlay window）**：盖在当前 App 之上、不再切走用户正在用的应用（修复"点开进到 app"）
+- 面板在非 Activity 环境承载 Compose：自带 Lifecycle / SavedState / ViewModelStore 宿主
+
 ## [0.3.1] - 2026-08-08
 ### Fixed
 - 侧边把手太窄(7dp)且贴边，撞上手势导航返回区导致点不到 → 加宽到 26dp、加高到 112dp、往里挪 2dp、并用 systemGestureExclusionRects 排除返回手势

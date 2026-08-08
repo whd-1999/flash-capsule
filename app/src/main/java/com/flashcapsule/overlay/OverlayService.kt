@@ -17,7 +17,8 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
-import com.flashcapsule.ui.PanelActivity
+import com.flashcapsule.FlashCapsuleApp
+import com.flashcapsule.ui.CaptureActivity
 import kotlin.math.abs
 
 /**
@@ -29,6 +30,7 @@ class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var handle: View? = null
+    private var panel: OverlayPanel? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -118,12 +120,32 @@ class OverlayService : Service() {
     }
 
     private fun openPanel() {
+        val current = panel
+        if (current != null) {
+            current.dismiss()
+            return
+        }
+        val repo = FlashCapsuleApp.from(this).repository
+        panel = OverlayPanel(
+            context = this,
+            repo = repo,
+            onVoice = { startCapture(voice = true) },
+            onText = { startCapture(voice = false) },
+            onDismiss = { panel = null },
+        ).also { it.show() }
+    }
+
+    private fun startCapture(voice: Boolean) {
         startActivity(
-            Intent(this, PanelActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            Intent(this, CaptureActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(CaptureActivity.EXTRA_VOICE, voice)
         )
     }
 
     override fun onDestroy() {
+        panel?.dismiss()
+        panel = null
         handle?.let { runCatching { windowManager.removeView(it) } }
         handle = null
         super.onDestroy()
