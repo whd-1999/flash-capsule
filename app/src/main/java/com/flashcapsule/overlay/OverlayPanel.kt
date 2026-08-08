@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -180,7 +181,7 @@ class OverlayPanel(
             @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
 }
 
-private val CardWidth = 300.dp
+private val CardWidth = 250.dp
 private val ScrimColor = Color(0x99000000)
 private val CardBg = Color(0xFFF7F5FB)
 private val CardText = Color(0xFF1C1B1F)
@@ -250,46 +251,45 @@ private fun PanelContent(
                 .clickable(interactionSource = noRipple, indication = null) { onDismiss() }
         )
 
+        // 内容贴底右侧、包裹高度：空白区落在遮罩上，点哪都能关
         Column(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .fillMaxHeight()
+                .align(Alignment.BottomEnd)
                 .padding(top = 52.dp, end = 12.dp, bottom = 36.dp),
             horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 "闪念胶囊",
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.labelLarge,
                 color = Color.White,
-                modifier = Modifier.padding(end = 4.dp, bottom = 10.dp),
+                modifier = Modifier.padding(end = 4.dp),
             )
 
             if (capsules.isEmpty()) {
-                Box(modifier = Modifier.weight(1f)) {
-                    CapsuleCard(onClick = {}) {
-                        Text(
-                            "还没有胶囊 —— 点下面「说话/打字」记一条",
-                            color = CardSub,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
+                CapsuleCard(onClick = {}) {
+                    Text(
+                        "还没有胶囊 —— 点下面「说话/打字」记一条",
+                        color = CardSub,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.heightIn(max = 460.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     horizontalAlignment = Alignment.End,
                 ) {
                     items(capsules.take(50), key = { it.id }) { c ->
                         CapsuleCard(colorTag = c.colorTag, onClick = { editing = c }) {
                             Text(
                                 text = c.text.ifBlank { "(空)" },
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = CardText,
-                                maxLines = 5,
+                                maxLines = 4,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.height(3.dp))
                             Text(
                                 text = fmt(c.createdAt) + " · " + c.source,
                                 style = MaterialTheme.typography.labelSmall,
@@ -305,17 +305,14 @@ private fun PanelContent(
                     it,
                     style = MaterialTheme.typography.labelMedium,
                     color = Color.White,
-                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
 
             if (listening) {
-                Spacer(Modifier.height(10.dp))
                 ListeningCard(partial = partial, onStop = { speech.stop() })
             }
 
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PillButton("说话", Icons.Filled.Mic) { startVoice() }
                 PillButton("打字", Icons.Filled.Keyboard) { composingNew = true }
             }
@@ -462,11 +459,11 @@ private fun PillButton(label: String, icon: ImageVector, onClick: () -> Unit) {
         shadowElevation = 4.dp,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 22.dp, vertical = 14.dp),
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(icon, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(6.dp))
             Text(label)
         }
     }
@@ -481,21 +478,21 @@ private fun CapsuleCard(
     Surface(
         modifier = Modifier.width(CardWidth),
         onClick = onClick,
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(16.dp),
         color = CardBg,
         contentColor = CardText,
-        shadowElevation = 4.dp,
+        shadowElevation = 3.dp,
     ) {
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
             if (colorTag != null) {
                 Box(
                     Modifier
-                        .width(5.dp)
+                        .width(4.dp)
                         .fillMaxHeight()
                         .background(colorOf(colorTag))
                 )
             }
-            Column(modifier = Modifier.padding(14.dp), content = content)
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), content = content)
         }
     }
 }

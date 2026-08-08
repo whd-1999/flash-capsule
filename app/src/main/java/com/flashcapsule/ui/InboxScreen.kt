@@ -1,8 +1,5 @@
 package com.flashcapsule.ui
 
-import android.app.Activity
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -55,8 +52,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.flashcapsule.capture.firstSpeechResult
-import com.flashcapsule.capture.speechIntent
 import com.flashcapsule.data.Languages
 import com.flashcapsule.model.Capsule
 import com.flashcapsule.model.ColorTag
@@ -69,6 +64,7 @@ import java.util.Locale
 fun InboxScreen(
     vm: InboxViewModel,
     onCapture: () -> Unit,
+    onVoiceCapture: () -> Unit = {},
     onToggleOverlay: () -> Unit = {},
     overlayOn: Boolean = false,
 ) {
@@ -76,14 +72,6 @@ fun InboxScreen(
     val query by vm.search.collectAsState()
     val lang by vm.lang.collectAsState()
     var showLangDialog by remember { mutableStateOf(false) }
-
-    val voice = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            result.data.firstSpeechResult()?.let { if (it.isNotBlank()) vm.captureVoice(it) }
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -114,7 +102,7 @@ fun InboxScreen(
                 )
                 CaptureFab(
                     onTap = onCapture,
-                    onLongPress = { voice.launch(speechIntent(lang)) },
+                    onLongPress = onVoiceCapture,
                 )
             }
         },

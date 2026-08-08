@@ -45,6 +45,12 @@ class MainActivity : ComponentActivity() {
                 InboxScreen(
                     vm = vm,
                     onCapture = { startActivity(Intent(this, CaptureActivity::class.java)) },
+                    onVoiceCapture = {
+                        startActivity(
+                            Intent(this, CaptureActivity::class.java)
+                                .putExtra(CaptureActivity.EXTRA_VOICE, true)
+                        )
+                    },
                     overlayOn = overlayOn,
                     onToggleOverlay = {
                         if (overlayOn) {
