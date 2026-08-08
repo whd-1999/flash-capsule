@@ -7,13 +7,22 @@ plugins {
 android {
     namespace = "com.flashcapsule"
     compileSdk = 34
+    ndkVersion = "26.3.11579264"
 
     defaultConfig {
         applicationId = "com.flashcapsule"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 8
+        versionName = "0.8.0"
+        ndk { abiFilters += listOf("arm64-v8a") }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     buildFeatures {

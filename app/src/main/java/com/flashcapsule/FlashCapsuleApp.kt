@@ -9,7 +9,10 @@ import com.flashcapsule.data.db.AppDatabase
 import com.flashcapsule.sink.ObsidianSink
 import com.flashcapsule.sink.ShareSink
 import com.flashcapsule.sink.SinkRegistry
-import com.flashcapsule.transcribe.NoopTranscriber
+import com.flashcapsule.transcribe.WhisperTranscriber
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /** 轻量手动 DI（ServiceLocator）。不引 Koin/Hilt，保持简洁。 */
 class FlashCapsuleApp : Application() {
@@ -35,7 +38,8 @@ class FlashCapsuleApp : Application() {
         repository = CaptureRepository(
             dao = db.capsuleDao(),
             sinks = sinks,
-            transcriber = NoopTranscriber(),
+            transcriber = WhisperTranscriber(this),
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
         )
     }
 

@@ -20,3 +20,6 @@ Thumbs.db
 # Keystore (别提交签名密钥)
 *.jks
 *.keystore
+
+# vendor 下载的压缩包（源码目录会提交，zip 不提交）
+vendor/*.zip

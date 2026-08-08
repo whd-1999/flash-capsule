@@ -10,8 +10,10 @@ import com.flashcapsule.model.ColorTag
 import com.flashcapsule.model.RawCapture
 import com.flashcapsule.sink.SinkRegistry
 import com.flashcapsule.transcribe.Transcriber
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 /**
@@ -21,7 +23,8 @@ import java.util.UUID
 class CaptureRepository(
     private val dao: CapsuleDao,
     private val sinks: SinkRegistry,
-    @Suppress("unused") private val transcriber: Transcriber, // v2: 音频→文字的差插口
+    private val transcriber: Transcriber,
+    private val scope: CoroutineScope,
 ) {
     fun observeAll(): Flow<List<Capsule>> =
         dao.observeAll().map { list -> list.map(CapsuleEntity::toModel) }
@@ -47,7 +50,25 @@ class CaptureRepository(
         )
         dao.upsert(capsule.toEntity())
         sinks.dispatchAuto(capsule)
+        // 语音胶囊（有音频、无文字）→ 后台用 Whisper 转写填字
+        if (raw.text.isNullOrBlank() && raw.audioPath != null) {
+            scope.launch { transcribeInto(capsule.id, raw.audioPath) }
+        }
         return capsule
+    }
+
+    private suspend fun transcribeInto(id: String, audioPath: String) {
+        val text = runCatching { transcriber.transcribe(audioPath) }.getOrDefault("")
+        if (text.isNotBlank()) {
+            val e = dao.byId(id) ?: return
+            dao.upsert(
+                e.copy(
+                    text = text,
+                    status = CapsuleStatus.TRANSCRIBED.name,
+                    updatedAt = System.currentTimeMillis(),
+                )
+            )
+        }
     }
 
     suspend fun setColor(id: String, color: ColorTag?) {
