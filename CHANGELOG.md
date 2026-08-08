@@ -11,6 +11,15 @@
 - ContentProvider 读接口（供自动化脚本拉取）
 - 把手拖到左缘 / 边缘位置记忆；面板内直接编辑/删除
 
+## [0.6.0] - 2026-08-08
+### Added
+- **录音为主（对齐原版）**：悬浮面板「说话」改为录音——AudioRecorder 录 m4a（16k，备 Whisper）+ **实时波形**，点「完成」保存
+- 胶囊**存音频 + 波形 + ▶ 播放**：语音胶囊显示波形和播放按钮，可回放原声（AudioPlayer）
+- 数据层加 waveform 字段；DB 升级到 v2（fallbackToDestructiveMigration）
+### Notes
+- 本步不含转写；文字转写将在 v0.6.1 用端上 Whisper 从录音生成（NDK 已就绪）
+- 磁贴/助理/主界面语音暂仍走系统 STT（出字不留音频），后续统一为录音+Whisper
+
 ## [0.5.0] - 2026-08-08
 ### Changed
 - **全部入口统一直接收音**：磁贴/数字助理/主界面长按的语音也改用 SpeechRecognizer，不再跳系统语音界面（CaptureActivity 重做）

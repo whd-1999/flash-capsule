@@ -11,6 +11,7 @@ import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -31,12 +32,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -57,7 +60,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
@@ -78,9 +83,11 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.flashcapsule.R
+import com.flashcapsule.capture.AudioPlayer
+import com.flashcapsule.capture.AudioRecorder
 import com.flashcapsule.capture.MicPermissionActivity
-import com.flashcapsule.capture.SpeechCapture
 import com.flashcapsule.data.CaptureRepository
+import com.flashcapsule.data.FileStore
 import com.flashcapsule.model.Capsule
 import com.flashcapsule.model.ColorTag
 import com.flashcapsule.model.RawCapture
@@ -90,24 +97,23 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 /**
- * 真·悬浮面板：全屏遮罩 + 右侧堆叠的胶囊卡片，盖在当前 App 之上。
- * 说话 = 直接开麦（SpeechRecognizer，不跳系统语音界面）；打字 = 面板内直接写。
- * 一次性对象，dismiss 后需重新 new。
+ * 悬浮面板：全屏遮罩 + 右侧堆叠胶囊。
+ * 说话 = 录音（存音频 + 实时波形），胶囊里可 ▶ 回放；打字 = 面板内直接写。
+ * （文字转写将在 v0.6 第二步用端上 Whisper 从音频生成。）
  */
 class OverlayPanel(
     private val context: Context,
     private val repo: CaptureRepository,
-    private val langCode: String,
+    @Suppress("unused") private val langCode: String,
     private val onDismiss: () -> Unit,
 ) : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
 
     private val lifecycleRegistry = LifecycleRegistry(this)
     override val lifecycle: Lifecycle get() = lifecycleRegistry
-
     override val viewModelStore = ViewModelStore()
-
     private val savedStateController = SavedStateRegistryController.create(this)
     override val savedStateRegistry: SavedStateRegistry get() = savedStateController.savedStateRegistry
 
@@ -125,13 +131,7 @@ class OverlayPanel(
             setViewTreeViewModelStoreOwner(this@OverlayPanel)
             setViewTreeSavedStateRegistryOwner(this@OverlayPanel)
             setContent {
-                AppTheme {
-                    PanelContent(
-                        repo = repo,
-                        langCode = langCode,
-                        onDismiss = { dismiss() },
-                    )
-                }
+                AppTheme { PanelContent(repo = repo, onDismiss = { dismiss() }) }
             }
         }
 
@@ -141,8 +141,7 @@ class OverlayPanel(
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         val lp = WindowManager.LayoutParams(w, h, overlayType(), flags, PixelFormat.TRANSLUCENT).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 0
-            y = 0
+            x = 0; y = 0
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode =
@@ -169,16 +168,14 @@ class OverlayPanel(
             b.width() to b.height()
         } else {
             val dm = DisplayMetrics()
-            @Suppress("DEPRECATION")
-            windowManager.defaultDisplay.getRealMetrics(dm)
+            @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(dm)
             dm.widthPixels to dm.heightPixels
         }
 
     private fun overlayType(): Int =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        else
-            @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+        else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
 }
 
 private val CardWidth = 250.dp
@@ -187,29 +184,32 @@ private val CardBg = Color(0xFFF7F5FB)
 private val CardText = Color(0xFF1C1B1F)
 private val CardSub = Color(0xFF6B6673)
 private val DeleteRed = Color(0xFFD32F2F)
+private val RecRed = Color(0xFFE53935)
 
 @Composable
-private fun PanelContent(
-    repo: CaptureRepository,
-    langCode: String,
-    onDismiss: () -> Unit,
-) {
+private fun PanelContent(repo: CaptureRepository, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val flow = remember { repo.observeAll() }
     val capsules by flow.collectAsState(initial = emptyList())
     val noRipple = remember { MutableInteractionSource() }
     val scope = rememberCoroutineScope()
 
+    val recorder = remember { AudioRecorder(context) }
+    val fileStore = remember { FileStore(context) }
+    var recording by remember { mutableStateOf(false) }
+    var wave by remember { mutableStateOf(listOf<Int>()) }
+    var recFile by remember { mutableStateOf<java.io.File?>(null) }
+    var playing by remember { mutableStateOf<String?>(null) }
+
     var editing by remember { mutableStateOf<Capsule?>(null) }
     var composingNew by remember { mutableStateOf(false) }
-    var listening by remember { mutableStateOf(false) }
-    var partial by remember { mutableStateOf("") }
     var toast by remember { mutableStateOf<String?>(null) }
 
-    val speech = remember { SpeechCapture(context) }
-    DisposableEffect(Unit) { onDispose { speech.destroy() } }
+    DisposableEffect(Unit) {
+        onDispose { recorder.cancel(); AudioPlayer.stop() }
+    }
 
-    fun startVoice() {
+    fun startRec() {
         val granted = ContextCompat.checkSelfPermission(
             context, Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
@@ -221,27 +221,42 @@ private fun PanelContent(
             toast = "已请求麦克风权限，授权后再点「说话」"
             return
         }
-        partial = ""
-        listening = true
-        speech.start(
-            langCode = langCode,
-            onPartial = { partial = it },
-            onFinal = { text ->
-                listening = false
-                if (text.isNotBlank()) {
-                    scope.launch { repo.ingest(RawCapture(text = text, source = "voice")) }
-                }
-            },
-            onError = { msg ->
-                listening = false
-                toast = msg
-            },
-        )
+        val f = fileStore.newAudioFile(UUID.randomUUID().toString())
+        try {
+            recorder.start(f)
+            recFile = f
+            wave = emptyList()
+            recording = true
+        } catch (e: Exception) {
+            toast = "录音启动失败"
+        }
     }
 
-    LaunchedEffect(toast) {
-        if (toast != null) { delay(2500); toast = null }
+    fun finishRec() {
+        val f = recorder.stop()
+        recording = false
+        if (f != null && wave.isNotEmpty()) {
+            val samples = wave
+            scope.launch {
+                repo.ingest(RawCapture(audioPath = f.absolutePath, waveform = samples, source = "voice"))
+            }
+        } else {
+            toast = "录音太短"
+        }
+        recFile = null
     }
+
+    fun cancelRec() {
+        recorder.cancel(); recording = false; recFile = null; wave = emptyList()
+    }
+
+    LaunchedEffect(recording) {
+        while (recording) {
+            wave = wave + recorder.amplitude()
+            delay(80)
+        }
+    }
+    LaunchedEffect(toast) { if (toast != null) { delay(2500); toast = null } }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -251,7 +266,6 @@ private fun PanelContent(
                 .clickable(interactionSource = noRipple, indication = null) { onDismiss() }
         )
 
-        // 内容贴底右侧、包裹高度：空白区落在遮罩上，点哪都能关
         Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -268,27 +282,39 @@ private fun PanelContent(
 
             if (capsules.isEmpty()) {
                 CapsuleCard(onClick = {}) {
-                    Text(
-                        "还没有胶囊 —— 点下面「说话/打字」记一条",
-                        color = CardSub,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    Text("还没有胶囊 —— 点下面「说话/打字」记一条", color = CardSub, style = MaterialTheme.typography.bodySmall)
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.heightIn(max = 460.dp),
+                    modifier = Modifier.heightIn(max = 440.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     horizontalAlignment = Alignment.End,
                 ) {
                     items(capsules.take(50), key = { it.id }) { c ->
                         CapsuleCard(colorTag = c.colorTag, onClick = { editing = c }) {
-                            Text(
-                                text = c.text.ifBlank { "(空)" },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = CardText,
-                                maxLines = 4,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            if (c.text.isNotBlank()) {
+                                Text(
+                                    text = c.text,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = CardText,
+                                    maxLines = 4,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            if (c.audioPath != null) {
+                                if (c.text.isNotBlank()) Spacer(Modifier.height(6.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    PlayDot(isPlaying = playing == c.audioPath) {
+                                        AudioPlayer.toggle(c.audioPath) { playing = AudioPlayer.currentPath }
+                                    }
+                                    Spacer(Modifier.width(8.dp))
+                                    Waveform(
+                                        samples = c.waveform,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.weight(1f).height(26.dp),
+                                    )
+                                }
+                            }
                             Spacer(Modifier.height(3.dp))
                             Text(
                                 text = fmt(c.createdAt) + " · " + c.source,
@@ -300,20 +326,16 @@ private fun PanelContent(
                 }
             }
 
-            toast?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White,
-                )
-            }
+            toast?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Color.White) }
 
-            if (listening) {
-                ListeningCard(partial = partial, onStop = { speech.stop() })
+            if (recording) {
+                RecordingCard(wave = wave, onFinish = { finishRec() }, onCancel = { cancelRec() })
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PillButton("说话", Icons.Filled.Mic) { startVoice() }
+                PillButton(if (recording) "录音中" else "说话", Icons.Filled.Mic) {
+                    if (recording) finishRec() else startRec()
+                }
                 PillButton("打字", Icons.Filled.Keyboard) { composingNew = true }
             }
         }
@@ -323,29 +345,17 @@ private fun PanelContent(
                 title = "编辑胶囊",
                 initialText = cap.text,
                 showDelete = true,
-                onSave = { newText ->
-                    scope.launch { repo.updateText(cap.id, newText) }
-                    editing = null
-                },
-                onDelete = {
-                    scope.launch { repo.delete(cap.id) }
-                    editing = null
-                },
+                onSave = { t -> scope.launch { repo.updateText(cap.id, t) }; editing = null },
+                onDelete = { scope.launch { repo.delete(cap.id) }; editing = null },
                 onDismiss = { editing = null },
             )
         }
-
         if (composingNew) {
             EditSheet(
                 title = "新胶囊",
                 initialText = "",
                 showDelete = false,
-                onSave = { newText ->
-                    if (newText.isNotBlank()) {
-                        scope.launch { repo.ingest(RawCapture(text = newText, source = "app")) }
-                    }
-                    composingNew = false
-                },
+                onSave = { t -> if (t.isNotBlank()) scope.launch { repo.ingest(RawCapture(text = t, source = "app")) }; composingNew = false },
                 onDelete = {},
                 onDismiss = { composingNew = false },
             )
@@ -354,29 +364,70 @@ private fun PanelContent(
 }
 
 @Composable
-private fun ListeningCard(partial: String, onStop: () -> Unit) {
+private fun RecordingCard(wave: List<Int>, onFinish: () -> Unit, onCancel: () -> Unit) {
     Surface(
         modifier = Modifier.width(CardWidth),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(16.dp),
         color = CardBg,
         contentColor = CardText,
-        shadowElevation = 4.dp,
+        shadowElevation = 3.dp,
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-            Spacer(Modifier.width(12.dp))
-            Text(
-                text = partial.ifBlank { "聆听中…" },
-                color = CardText,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+            Box(Modifier.size(10.dp).background(RecRed, CircleShape))
+            Spacer(Modifier.width(8.dp))
+            Waveform(
+                samples = wave.takeLast(40),
+                color = RecRed,
+                modifier = Modifier.weight(1f).height(26.dp),
             )
-            TextButton(onClick = onStop) { Text("停止") }
+            Spacer(Modifier.width(6.dp))
+            TextButton(onClick = onCancel) { Text("取消", color = CardSub) }
+            TextButton(onClick = onFinish) { Text("完成") }
+        }
+    }
+}
+
+@Composable
+private fun PlayDot(isPlaying: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        modifier = Modifier.size(30.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = if (isPlaying) "暂停" else "播放",
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Waveform(samples: List<Int>, color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        if (samples.isEmpty()) return@Canvas
+        val maxA = (samples.maxOrNull() ?: 1).coerceAtLeast(1).toFloat()
+        val n = samples.size
+        val slot = size.width / n
+        val barW = (slot * 0.55f).coerceAtLeast(1.5f)
+        val midY = size.height / 2f
+        samples.forEachIndexed { i, a ->
+            val h = (a / maxA) * size.height * 0.9f
+            val x = i * slot + slot / 2f
+            drawLine(
+                color = color,
+                start = Offset(x, midY - h / 2f),
+                end = Offset(x, midY + h / 2f),
+                strokeWidth = barW,
+                cap = StrokeCap.Round,
+            )
         }
     }
 }
@@ -405,7 +456,7 @@ private fun EditSheet(
         Surface(
             modifier = Modifier
                 .width(330.dp)
-                .clickable(interactionSource = noRipple, indication = null) { /* 消费 */ },
+                .clickable(interactionSource = noRipple, indication = null) { },
             shape = RoundedCornerShape(20.dp),
             color = CardBg,
             contentColor = CardText,
@@ -417,9 +468,7 @@ private fun EditSheet(
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focus),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
                     textStyle = TextStyle(color = CardText),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = CardText,
@@ -431,9 +480,7 @@ private fun EditSheet(
                 )
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (showDelete) {
-                        TextButton(onClick = onDelete) { Text("删除", color = DeleteRed) }
-                    }
+                    if (showDelete) TextButton(onClick = onDelete) { Text("删除", color = DeleteRed) }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = onDismiss) { Text("取消", color = CardSub) }
                     Spacer(Modifier.width(4.dp))
@@ -443,10 +490,7 @@ private fun EditSheet(
         }
     }
 
-    LaunchedEffect(Unit) {
-        focus.requestFocus()
-        keyboard?.show()
-    }
+    LaunchedEffect(Unit) { focus.requestFocus(); keyboard?.show() }
 }
 
 @Composable
@@ -485,12 +529,7 @@ private fun CapsuleCard(
     ) {
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
             if (colorTag != null) {
-                Box(
-                    Modifier
-                        .width(4.dp)
-                        .fillMaxHeight()
-                        .background(colorOf(colorTag))
-                )
+                Box(Modifier.width(4.dp).fillMaxHeight().background(colorOf(colorTag)))
             }
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), content = content)
         }

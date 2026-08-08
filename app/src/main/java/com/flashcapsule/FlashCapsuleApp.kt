@@ -23,7 +23,9 @@ class FlashCapsuleApp : Application() {
     override fun onCreate() {
         super.onCreate()
         settings = Settings(this)
-        val db = Room.databaseBuilder(this, AppDatabase::class.java, "flashcapsule.db").build()
+        val db = Room.databaseBuilder(this, AppDatabase::class.java, "flashcapsule.db")
+            .fallbackToDestructiveMigration()
+            .build()
         val sinks = SinkRegistry(
             listOf(
                 ObsidianSink(this, auto = false), // 需要自动落 vault 时改 auto = true

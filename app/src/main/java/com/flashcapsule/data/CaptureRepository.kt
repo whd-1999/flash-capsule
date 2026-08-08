@@ -43,6 +43,7 @@ class CaptureRepository(
             colorTag = raw.colorTag,
             tags = raw.tags,
             source = raw.source,
+            waveform = raw.waveform,
         )
         dao.upsert(capsule.toEntity())
         sinks.dispatchAuto(capsule)

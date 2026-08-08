@@ -7,4 +7,5 @@ data class RawCapture(
     val source: String = "app",
     val colorTag: ColorTag? = null,
     val tags: List<String> = emptyList(),
+    val waveform: List<Int> = emptyList(),
 )

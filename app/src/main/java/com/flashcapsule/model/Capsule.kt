@@ -17,4 +17,6 @@ data class Capsule(
     val source: String = "app",
     val reminderAt: Long? = null,
     val pinned: Boolean = false,
+    /** 录音波形振幅采样（0..32767），用于绘制胶囊里的波形。 */
+    val waveform: List<Int> = emptyList(),
 )

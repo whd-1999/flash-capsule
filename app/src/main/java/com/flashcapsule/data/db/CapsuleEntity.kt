@@ -19,6 +19,7 @@ data class CapsuleEntity(
     val source: String,
     val reminderAt: Long?,
     val pinned: Boolean,
+    val waveform: String = "",
 )
 
 fun CapsuleEntity.toModel(): Capsule = Capsule(
@@ -33,6 +34,8 @@ fun CapsuleEntity.toModel(): Capsule = Capsule(
     source = source,
     reminderAt = reminderAt,
     pinned = pinned,
+    waveform = if (waveform.isBlank()) emptyList()
+    else waveform.split(",").mapNotNull { it.toIntOrNull() },
 )
 
 fun Capsule.toEntity(): CapsuleEntity = CapsuleEntity(
@@ -47,4 +50,5 @@ fun Capsule.toEntity(): CapsuleEntity = CapsuleEntity(
     source = source,
     reminderAt = reminderAt,
     pinned = pinned,
+    waveform = waveform.joinToString(","),
 )
