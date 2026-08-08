@@ -3,7 +3,9 @@ package com.flashcapsule.overlay
 import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Build
+import android.util.DisplayMetrics
 import android.view.ContextThemeWrapper
+import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import androidx.compose.foundation.background
@@ -38,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -106,18 +109,14 @@ class OverlayPanel(
             }
         }
 
-        // 覆盖整屏（含状态栏/挖孔区），避免顶部露出原界面造成割裂
+        val (w, h) = fullScreenSize()
         val flags = WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-        val lp = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            overlayType(),
-            flags,
-            PixelFormat.TRANSLUCENT,
-        ).apply {
-            gravity = android.view.Gravity.TOP or android.view.Gravity.START
+        val lp = WindowManager.LayoutParams(w, h, overlayType(), flags, PixelFormat.TRANSLUCENT).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = 0
+            y = 0
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode =
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
@@ -137,6 +136,18 @@ class OverlayPanel(
         onDismiss()
     }
 
+    /** 整屏真实像素（含状态栏/导航栏），保证遮罩盖满全屏。 */
+    private fun fullScreenSize(): Pair<Int, Int> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val b = windowManager.currentWindowMetrics.bounds
+            b.width() to b.height()
+        } else {
+            val dm = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay.getRealMetrics(dm)
+            dm.widthPixels to dm.heightPixels
+        }
+
     private fun overlayType(): Int =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -145,6 +156,10 @@ class OverlayPanel(
 }
 
 private val CardWidth = 300.dp
+private val ScrimColor = Color(0xE6000000)         // ~90% 黑，压住花哨壁纸
+private val CardBg = Color(0xFFF7F5FB)             // 浅色卡片
+private val CardText = Color(0xFF1C1B1F)           // 深色正文
+private val CardSub = Color(0xFF6B6673)            // 深灰副标题
 
 @Composable
 private fun PanelContent(
@@ -162,7 +177,7 @@ private fun PanelContent(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0x99000000))
+                .background(ScrimColor)
                 .clickable(interactionSource = noRipple, indication = null) { onDismiss() }
         )
 
@@ -170,33 +185,30 @@ private fun PanelContent(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .fillMaxHeight()
-                .padding(top = 44.dp, end = 12.dp, bottom = 28.dp),
+                .padding(top = 52.dp, end = 12.dp, bottom = 36.dp),
             horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
                 "闪念胶囊",
                 style = MaterialTheme.typography.titleMedium,
                 color = Color.White,
-                modifier = Modifier.padding(end = 4.dp, bottom = 2.dp),
+                modifier = Modifier.padding(end = 4.dp, bottom = 10.dp),
             )
 
-            // 顶部：说话 / 打字 两颗胶囊按钮
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PillButton("说话", Icons.Filled.Mic, onVoice)
-                PillButton("打字", Icons.Filled.Keyboard, onText)
-            }
-
+            // 胶囊列表（占满中间，向上堆叠）
             if (capsules.isEmpty()) {
-                CapsuleCard {
-                    Text(
-                        "还没有胶囊 —— 点上面「说话/打字」记一条",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                Box(modifier = Modifier.weight(1f)) {
+                    CapsuleCard {
+                        Text(
+                            "还没有胶囊 —— 点下面「说话/打字」记一条",
+                            color = CardSub,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
             } else {
                 LazyColumn(
+                    modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     horizontalAlignment = Alignment.End,
                 ) {
@@ -205,38 +217,46 @@ private fun PanelContent(
                             Text(
                                 text = c.text.ifBlank { "(空)" },
                                 style = MaterialTheme.typography.bodyLarge,
+                                color = CardText,
                                 maxLines = 5,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            Spacer(Modifier.padding(top = 2.dp))
+                            Spacer(Modifier.height(4.dp))
                             Text(
                                 text = fmt(c.createdAt) + " · " + c.source,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = CardSub,
                             )
                         }
                     }
                 }
+            }
+
+            // 底部：说话 / 打字（拇指区）
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                PillButton("说话", Icons.Filled.Mic, onVoice)
+                PillButton("打字", Icons.Filled.Keyboard, onText)
             }
         }
     }
 }
 
 @Composable
-private fun PillButton(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+private fun PillButton(label: String, icon: ImageVector, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(50),
         color = MaterialTheme.colorScheme.primary,
         contentColor = MaterialTheme.colorScheme.onPrimary,
-        shadowElevation = 3.dp,
+        shadowElevation = 4.dp,
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 22.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(icon, contentDescription = null)
-            Spacer(Modifier.padding(start = 6.dp))
+            Spacer(Modifier.width(8.dp))
             Text(label)
         }
     }
@@ -253,7 +273,8 @@ private fun CapsuleCard(
             .width(CardWidth)
             .clickable(interactionSource = consume, indication = null) { /* 消费点击，避免穿透关闭 */ },
         shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+        color = CardBg,
+        contentColor = CardText,
         shadowElevation = 4.dp,
     ) {
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
