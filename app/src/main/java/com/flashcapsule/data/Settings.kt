@@ -26,7 +26,13 @@ class Settings(context: Context) {
         get() = prefs.getString(KEY_LANG, "") ?: ""
         set(value) { prefs.edit().putString(KEY_LANG, value).apply() }
 
+    /** 侧边把手是否开启（用户意愿；实际是否显示还取决于悬浮窗权限）。 */
+    var overlayEnabled: Boolean
+        get() = prefs.getBoolean(KEY_OVERLAY, false)
+        set(value) { prefs.edit().putBoolean(KEY_OVERLAY, value).apply() }
+
     companion object {
         private const val KEY_LANG = "stt_language"
+        private const val KEY_OVERLAY = "overlay_enabled"
     }
 }

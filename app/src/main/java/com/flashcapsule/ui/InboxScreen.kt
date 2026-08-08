@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.VerticalSplit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -65,7 +66,12 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InboxScreen(vm: InboxViewModel, onCapture: () -> Unit) {
+fun InboxScreen(
+    vm: InboxViewModel,
+    onCapture: () -> Unit,
+    onToggleOverlay: () -> Unit = {},
+    overlayOn: Boolean = false,
+) {
     val capsules by vm.capsules.collectAsState()
     val query by vm.search.collectAsState()
     val lang by vm.lang.collectAsState()
@@ -84,6 +90,14 @@ fun InboxScreen(vm: InboxViewModel, onCapture: () -> Unit) {
             TopAppBar(
                 title = { Text("闪念胶囊") },
                 actions = {
+                    IconButton(onClick = onToggleOverlay) {
+                        Icon(
+                            Icons.Filled.VerticalSplit,
+                            contentDescription = "侧边把手",
+                            tint = if (overlayOn) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     IconButton(onClick = { showLangDialog = true }) {
                         Icon(Icons.Filled.Translate, contentDescription = "语音语言")
                     }
