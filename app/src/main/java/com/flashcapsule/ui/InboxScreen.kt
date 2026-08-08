@@ -22,10 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.VerticalSplit
 import androidx.compose.material3.AlertDialog
@@ -49,12 +46,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.flashcapsule.capture.AudioPlayer
 import com.flashcapsule.data.Languages
 import com.flashcapsule.model.Capsule
-import com.flashcapsule.model.ColorTag
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -68,10 +65,13 @@ fun InboxScreen(
     onToggleOverlay: () -> Unit = {},
     overlayOn: Boolean = false,
 ) {
+    val context = LocalContext.current
     val capsules by vm.capsules.collectAsState()
     val query by vm.search.collectAsState()
     val lang by vm.lang.collectAsState()
     var showLangDialog by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<Capsule?>(null) }
+    var playing by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
@@ -100,10 +100,7 @@ fun InboxScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
-                CaptureFab(
-                    onTap = onCapture,
-                    onLongPress = onVoiceCapture,
-                )
+                CaptureFab(onTap = onCapture, onLongPress = onVoiceCapture)
             }
         },
     ) { padding ->
@@ -138,9 +135,13 @@ fun InboxScreen(
                     items(capsules, key = { it.id }) { capsule ->
                         CapsuleCard(
                             capsule = capsule,
-                            onDelete = { vm.delete(capsule.id) },
-                            onShare = { vm.export("share", capsule.id) },
-                            onExportObsidian = { vm.export("obsidian", capsule.id) },
+                            playing = playing == capsule.audioPath,
+                            onPlay = {
+                                capsule.audioPath?.let { p ->
+                                    AudioPlayer.toggle(p) { playing = AudioPlayer.currentPath }
+                                }
+                            },
+                            onClick = { editing = capsule },
                         )
                     }
                 }
@@ -153,6 +154,23 @@ fun InboxScreen(
             current = lang,
             onPick = { vm.setLang(it); showLangDialog = false },
             onDismiss = { showLangDialog = false },
+        )
+    }
+
+    editing?.let { cap ->
+        CapsuleSheet(
+            capsule = cap,
+            playing = playing == cap.audioPath,
+            onPlay = {
+                cap.audioPath?.let { p -> AudioPlayer.toggle(p) { playing = AudioPlayer.currentPath } }
+            },
+            onSetColor = { vm.setColor(cap.id, it) },
+            onSaveText = { vm.updateText(cap.id, it); editing = null },
+            onDelete = { vm.delete(cap.id); editing = null },
+            onShare = { t -> capsuleShareText(context, t); editing = null },
+            onCalendar = { t -> capsuleAddToCalendar(context, t); editing = null },
+            onObsidian = { vm.export("obsidian", cap.id); editing = null },
+            onDismiss = { editing = null },
         )
     }
 }
@@ -179,46 +197,53 @@ private fun CaptureFab(onTap: () -> Unit, onLongPress: () -> Unit) {
 @Composable
 private fun CapsuleCard(
     capsule: Capsule,
-    onDelete: () -> Unit,
-    onShare: () -> Unit,
-    onExportObsidian: () -> Unit,
+    playing: Boolean,
+    onPlay: () -> Unit,
+    onClick: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-            val stripe = capsule.colorTag?.let(::colorOf)
-            if (stripe != null) {
+            capsule.colorTag?.let {
                 Box(
                     Modifier
                         .width(4.dp)
                         .fillMaxHeight()
-                        .background(stripe)
+                        .background(capsuleColorOf(it))
                 )
             }
             Column(Modifier.padding(12.dp)) {
-                Text(
-                    text = capsule.text.ifBlank { "(空)" },
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                if (capsule.text.isNotBlank()) {
                     Text(
-                        text = fmt(capsule.createdAt) + " · " + capsule.source,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = capsule.text,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                    Spacer(Modifier.weight(1f))
-                    IconButton(onClick = onExportObsidian) {
-                        Icon(Icons.Filled.Description, contentDescription = "落 Obsidian")
-                    }
-                    IconButton(onClick = onShare) {
-                        Icon(Icons.Filled.Share, contentDescription = "分享")
-                    }
-                    IconButton(onClick = onDelete) {
-                        Icon(Icons.Filled.Delete, contentDescription = "删除")
+                } else {
+                    CapsuleTranscribeHint(capsule, textColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (capsule.audioPath != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CapsulePlayDot(isPlaying = playing, onClick = onPlay)
+                        Spacer(Modifier.width(8.dp))
+                        CapsuleWaveform(
+                            samples = capsule.waveform,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f).height(26.dp),
+                        )
                     }
                 }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = fmt(capsule.createdAt) + " · " + capsule.source,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -248,16 +273,6 @@ private fun LanguageDialog(current: String, onPick: (String) -> Unit, onDismiss:
             }
         },
     )
-}
-
-private fun colorOf(tag: ColorTag): Color = when (tag) {
-    ColorTag.RED -> Color(0xFFE53935)
-    ColorTag.ORANGE -> Color(0xFFFB8C00)
-    ColorTag.YELLOW -> Color(0xFFFDD835)
-    ColorTag.GREEN -> Color(0xFF43A047)
-    ColorTag.BLUE -> Color(0xFF1E88E5)
-    ColorTag.PURPLE -> Color(0xFF8E24AA)
-    ColorTag.GRAY -> Color(0xFF9E9E9E)
 }
 
 private fun fmt(t: Long): String =

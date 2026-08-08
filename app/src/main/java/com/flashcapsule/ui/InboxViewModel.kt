@@ -47,6 +47,7 @@ class InboxViewModel(
 
     fun delete(id: String) = viewModelScope.launch { repo.delete(id) }
     fun setColor(id: String, c: ColorTag?) = viewModelScope.launch { repo.setColor(id, c) }
+    fun updateText(id: String, text: String) = viewModelScope.launch { repo.updateText(id, text) }
     fun export(sinkId: String, id: String) = viewModelScope.launch { repo.exportTo(sinkId, id) }
 
     class Factory(

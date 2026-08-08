@@ -35,28 +35,37 @@ object WhisperModel {
 
     private fun download(dest: File, onProgress: (Int) -> Unit) {
         val tmp = File(dest.absolutePath + ".part")
-        val conn = (URL(MODEL_URL).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 30_000
-            readTimeout = 60_000
-            instanceFollowRedirects = true
-        }
-        conn.connect()
-        val total = conn.contentLengthLong
-        conn.inputStream.use { input ->
-            tmp.outputStream().use { output ->
-                val buf = ByteArray(1 shl 16)
-                var read = 0L
-                var n: Int
-                while (input.read(buf).also { n = it } >= 0) {
-                    output.write(buf, 0, n)
-                    read += n
-                    if (total > 0) onProgress(((read * 100) / total).toInt())
+        TranscriptionState.modelDownload.value = 0
+        try {
+            val conn = (URL(MODEL_URL).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 30_000
+                readTimeout = 60_000
+                instanceFollowRedirects = true
+            }
+            conn.connect()
+            val total = conn.contentLengthLong
+            conn.inputStream.use { input ->
+                tmp.outputStream().use { output ->
+                    val buf = ByteArray(1 shl 16)
+                    var read = 0L
+                    var n: Int
+                    while (input.read(buf).also { n = it } >= 0) {
+                        output.write(buf, 0, n)
+                        read += n
+                        if (total > 0) {
+                            val pct = ((read * 100) / total).toInt()
+                            onProgress(pct)
+                            TranscriptionState.modelDownload.value = pct
+                        }
+                    }
                 }
             }
-        }
-        conn.disconnect()
-        if (!tmp.renameTo(dest)) {
-            tmp.copyTo(dest, overwrite = true); tmp.delete()
+            conn.disconnect()
+            if (!tmp.renameTo(dest)) {
+                tmp.copyTo(dest, overwrite = true); tmp.delete()
+            }
+        } finally {
+            TranscriptionState.modelDownload.value = null
         }
     }
 }

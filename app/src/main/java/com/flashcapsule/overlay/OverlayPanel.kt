@@ -103,6 +103,13 @@ import com.flashcapsule.data.FileStore
 import com.flashcapsule.model.Capsule
 import com.flashcapsule.model.ColorTag
 import com.flashcapsule.model.RawCapture
+import com.flashcapsule.ui.CapsulePlayDot
+import com.flashcapsule.ui.CapsuleSheet
+import com.flashcapsule.ui.CapsuleTranscribeHint
+import com.flashcapsule.ui.CapsuleWaveform
+import com.flashcapsule.ui.capsuleAddToCalendar
+import com.flashcapsule.ui.capsuleColorOf
+import com.flashcapsule.ui.capsuleShareText
 import com.flashcapsule.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -312,15 +319,17 @@ private fun PanelContent(repo: CaptureRepository, onDismiss: () -> Unit) {
                                     maxLines = 4,
                                     overflow = TextOverflow.Ellipsis,
                                 )
+                            } else {
+                                CapsuleTranscribeHint(c)
                             }
                             if (c.audioPath != null) {
-                                if (c.text.isNotBlank()) Spacer(Modifier.height(6.dp))
+                                Spacer(Modifier.height(6.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    PlayDot(isPlaying = playing == c.audioPath) {
+                                    CapsulePlayDot(isPlaying = playing == c.audioPath) {
                                         AudioPlayer.toggle(c.audioPath) { playing = AudioPlayer.currentPath }
                                     }
                                     Spacer(Modifier.width(8.dp))
-                                    Waveform(
+                                    CapsuleWaveform(
                                         samples = c.waveform,
                                         color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.weight(1f).height(26.dp),
@@ -360,8 +369,8 @@ private fun PanelContent(repo: CaptureRepository, onDismiss: () -> Unit) {
                 onSetColor = { tag -> scope.launch { repo.setColor(cap.id, tag) } },
                 onSaveText = { t -> scope.launch { repo.updateText(cap.id, t) }; editing = null },
                 onDelete = { scope.launch { repo.delete(cap.id) }; editing = null },
-                onShare = { t -> shareText(context, t); editing = null },
-                onCalendar = { t -> addToCalendar(context, t); editing = null },
+                onShare = { t -> capsuleShareText(context, t); editing = null },
+                onCalendar = { t -> capsuleAddToCalendar(context, t); editing = null },
                 onObsidian = { scope.launch { repo.exportTo("obsidian", cap.id) }; editing = null },
                 onDismiss = { editing = null },
             )
@@ -394,7 +403,7 @@ private fun RecordingCard(wave: List<Int>, onFinish: () -> Unit, onCancel: () ->
         ) {
             Box(Modifier.size(10.dp).background(RecRed, CircleShape))
             Spacer(Modifier.width(8.dp))
-            Waveform(
+            CapsuleWaveform(
                 samples = wave.takeLast(40),
                 color = RecRed,
                 modifier = Modifier.weight(1f).height(26.dp),
@@ -404,202 +413,6 @@ private fun RecordingCard(wave: List<Int>, onFinish: () -> Unit, onCancel: () ->
             TextButton(onClick = onFinish) { Text("完成") }
         }
     }
-}
-
-@Composable
-private fun PlayDot(isPlaying: Boolean, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary,
-        modifier = Modifier.size(30.dp),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                contentDescription = if (isPlaying) "暂停" else "播放",
-                modifier = Modifier.size(18.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun Waveform(samples: List<Int>, color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        if (samples.isEmpty()) return@Canvas
-        val maxA = (samples.maxOrNull() ?: 1).coerceAtLeast(1).toFloat()
-        val n = samples.size
-        val slot = size.width / n
-        val barW = (slot * 0.55f).coerceAtLeast(1.5f)
-        val midY = size.height / 2f
-        samples.forEachIndexed { i, a ->
-            val h = (a / maxA) * size.height * 0.9f
-            val x = i * slot + slot / 2f
-            drawLine(
-                color = color,
-                start = Offset(x, midY - h / 2f),
-                end = Offset(x, midY + h / 2f),
-                strokeWidth = barW,
-                cap = StrokeCap.Round,
-            )
-        }
-    }
-}
-
-private data class Category(
-    val label: String,
-    val tag: ColorTag,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-)
-
-private val Categories = listOf(
-    Category("便签", ColorTag.BLUE, Icons.Filled.Description),
-    Category("重要", ColorTag.RED, Icons.Filled.PriorityHigh),
-    Category("待办", ColorTag.ORANGE, Icons.Filled.CheckCircle),
-    Category("待发送", ColorTag.GREEN, Icons.Filled.Chat),
-    Category("灵感", ColorTag.PURPLE, Icons.Filled.Lightbulb),
-)
-
-private fun shareText(context: Context, text: String) {
-    if (text.isBlank()) return
-    val send = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, text)
-    }
-    runCatching {
-        context.startActivity(Intent.createChooser(send, "分享").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
-}
-
-private fun addToCalendar(context: Context, text: String) {
-    val i = Intent(Intent.ACTION_INSERT).apply {
-        data = CalendarContract.Events.CONTENT_URI
-        putExtra(CalendarContract.Events.TITLE, text)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    runCatching { context.startActivity(i) }
-}
-
-/** 展开的胶囊：顶部 5 分类色标 + 文字/波形/播放 + 底部操作栏。 */
-@Composable
-private fun CapsuleSheet(
-    capsule: Capsule,
-    playing: Boolean,
-    onPlay: () -> Unit,
-    onSetColor: (ColorTag) -> Unit,
-    onSaveText: (String) -> Unit,
-    onDelete: () -> Unit,
-    onShare: (String) -> Unit,
-    onCalendar: (String) -> Unit,
-    onObsidian: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val noRipple = remember { MutableInteractionSource() }
-    var text by remember { mutableStateOf(capsule.text) }
-    var color by remember { mutableStateOf(capsule.colorTag) }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xB3000000))
-            .clickable(interactionSource = noRipple, indication = null) { onDismiss() },
-        contentAlignment = Alignment.Center,
-    ) {
-        Surface(
-            modifier = Modifier
-                .width(340.dp)
-                .clickable(interactionSource = noRipple, indication = null) { },
-            shape = RoundedCornerShape(20.dp),
-            color = CardBg,
-            contentColor = CardText,
-            shadowElevation = 8.dp,
-        ) {
-            Column(Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Categories.forEach { c ->
-                        CategoryDot(c.tag, c.icon, selected = color == c.tag) {
-                            color = c.tag; onSetColor(c.tag)
-                        }
-                    }
-                }
-                Spacer(Modifier.height(14.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("（语音胶囊，转写后自动填字）", color = CardSub) },
-                    textStyle = TextStyle(color = CardText),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = CardText,
-                        unfocusedTextColor = CardText,
-                        cursorColor = CardText,
-                        focusedContainerColor = Color.White,
-                        unfocusedContainerColor = Color.White,
-                    ),
-                )
-                if (capsule.audioPath != null) {
-                    Spacer(Modifier.height(10.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        PlayDot(isPlaying = playing, onClick = onPlay)
-                        Spacer(Modifier.width(8.dp))
-                        Waveform(
-                            samples = capsule.waveform,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f).height(28.dp),
-                        )
-                    }
-                }
-                Spacer(Modifier.height(14.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ActionIcon(Icons.Filled.Share, "分享") { onShare(text) }
-                    ActionIcon(Icons.Filled.Description, "落 Obsidian") { onObsidian() }
-                    ActionIcon(Icons.Filled.Event, "转日历") { onCalendar(text) }
-                    ActionIcon(Icons.Filled.Delete, "删除", DeleteRed) { onDelete() }
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onDismiss) { Text("取消", color = CardSub) }
-                    Spacer(Modifier.width(4.dp))
-                    Button(onClick = { onSaveText(text) }) { Text("保存") }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CategoryDot(
-    tag: ColorTag,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = colorOf(tag),
-        contentColor = Color.White,
-        modifier = Modifier
-            .size(42.dp)
-            .then(if (selected) Modifier.border(BorderStroke(2.5.dp, CardText), CircleShape) else Modifier),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-        }
-    }
-}
-
-@Composable
-private fun ActionIcon(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    desc: String,
-    tint: Color = CardText,
-    onClick: () -> Unit,
-) {
-    IconButton(onClick = onClick) { Icon(icon, contentDescription = desc, tint = tint) }
 }
 
 @Composable
@@ -699,21 +512,11 @@ private fun CapsuleCard(
     ) {
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
             if (colorTag != null) {
-                Box(Modifier.width(4.dp).fillMaxHeight().background(colorOf(colorTag)))
+                Box(Modifier.width(4.dp).fillMaxHeight().background(capsuleColorOf(colorTag)))
             }
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp), content = content)
         }
     }
-}
-
-private fun colorOf(tag: ColorTag): Color = when (tag) {
-    ColorTag.RED -> Color(0xFFE53935)
-    ColorTag.ORANGE -> Color(0xFFFB8C00)
-    ColorTag.YELLOW -> Color(0xFFFDD835)
-    ColorTag.GREEN -> Color(0xFF43A047)
-    ColorTag.BLUE -> Color(0xFF1E88E5)
-    ColorTag.PURPLE -> Color(0xFF8E24AA)
-    ColorTag.GRAY -> Color(0xFF9E9E9E)
 }
 
 private fun fmt(t: Long): String =
