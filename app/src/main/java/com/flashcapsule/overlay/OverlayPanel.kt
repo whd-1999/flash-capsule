@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -29,19 +30,31 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -60,6 +73,7 @@ import com.flashcapsule.data.CaptureRepository
 import com.flashcapsule.model.Capsule
 import com.flashcapsule.model.ColorTag
 import com.flashcapsule.ui.theme.AppTheme
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -117,6 +131,7 @@ class OverlayPanel(
             gravity = Gravity.TOP or Gravity.START
             x = 0
             y = 0
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode =
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
@@ -136,7 +151,6 @@ class OverlayPanel(
         onDismiss()
     }
 
-    /** 整屏真实像素（含状态栏/导航栏），保证遮罩盖满全屏。 */
     private fun fullScreenSize(): Pair<Int, Int> =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val b = windowManager.currentWindowMetrics.bounds
@@ -156,10 +170,11 @@ class OverlayPanel(
 }
 
 private val CardWidth = 300.dp
-private val ScrimColor = Color(0xE6000000)         // ~90% 黑，压住花哨壁纸
-private val CardBg = Color(0xFFF7F5FB)             // 浅色卡片
-private val CardText = Color(0xFF1C1B1F)           // 深色正文
-private val CardSub = Color(0xFF6B6673)            // 深灰副标题
+private val ScrimColor = Color(0x99000000)   // ~60% 黑，较浅
+private val CardBg = Color(0xFFF7F5FB)
+private val CardText = Color(0xFF1C1B1F)
+private val CardSub = Color(0xFF6B6673)
+private val DeleteRed = Color(0xFFD32F2F)
 
 @Composable
 private fun PanelContent(
@@ -171,9 +186,10 @@ private fun PanelContent(
     val flow = remember { repo.observeAll() }
     val capsules by flow.collectAsState(initial = emptyList())
     val noRipple = remember { MutableInteractionSource() }
+    val scope = rememberCoroutineScope()
+    var editing by remember { mutableStateOf<Capsule?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // 全屏暗色遮罩：点它关闭
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -195,10 +211,9 @@ private fun PanelContent(
                 modifier = Modifier.padding(end = 4.dp, bottom = 10.dp),
             )
 
-            // 胶囊列表（占满中间，向上堆叠）
             if (capsules.isEmpty()) {
                 Box(modifier = Modifier.weight(1f)) {
-                    CapsuleCard {
+                    CapsuleCard(onClick = {}) {
                         Text(
                             "还没有胶囊 —— 点下面「说话/打字」记一条",
                             color = CardSub,
@@ -213,7 +228,7 @@ private fun PanelContent(
                     horizontalAlignment = Alignment.End,
                 ) {
                     items(capsules.take(50), key = { it.id }) { c ->
-                        CapsuleCard(colorTag = c.colorTag) {
+                        CapsuleCard(colorTag = c.colorTag, onClick = { editing = c }) {
                             Text(
                                 text = c.text.ifBlank { "(空)" },
                                 style = MaterialTheme.typography.bodyLarge,
@@ -232,13 +247,91 @@ private fun PanelContent(
                 }
             }
 
-            // 底部：说话 / 打字（拇指区）
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 PillButton("说话", Icons.Filled.Mic, onVoice)
                 PillButton("打字", Icons.Filled.Keyboard, onText)
             }
         }
+
+        editing?.let { cap ->
+            EditSheet(
+                capsule = cap,
+                onSave = { newText ->
+                    scope.launch { repo.updateText(cap.id, newText) }
+                    editing = null
+                },
+                onDelete = {
+                    scope.launch { repo.delete(cap.id) }
+                    editing = null
+                },
+                onDismiss = { editing = null },
+            )
+        }
+    }
+}
+
+@Composable
+private fun EditSheet(
+    capsule: Capsule,
+    onSave: (String) -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val noRipple = remember { MutableInteractionSource() }
+    var text by remember(capsule.id) { mutableStateOf(capsule.text) }
+    val focus = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xB3000000))
+            .clickable(interactionSource = noRipple, indication = null) { onDismiss() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            modifier = Modifier
+                .width(330.dp)
+                .clickable(interactionSource = noRipple, indication = null) { /* 消费 */ },
+            shape = RoundedCornerShape(20.dp),
+            color = CardBg,
+            contentColor = CardText,
+            shadowElevation = 8.dp,
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Text("编辑胶囊", style = MaterialTheme.typography.titleMedium, color = CardText)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focus),
+                    textStyle = TextStyle(color = CardText),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = CardText,
+                        unfocusedTextColor = CardText,
+                        cursorColor = CardText,
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                    ),
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onDelete) { Text("删除", color = DeleteRed) }
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onDismiss) { Text("取消", color = CardSub) }
+                    Spacer(Modifier.width(4.dp))
+                    Button(onClick = { onSave(text) }) { Text("保存") }
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(capsule.id) {
+        focus.requestFocus()
+        keyboard?.show()
     }
 }
 
@@ -265,13 +358,12 @@ private fun PillButton(label: String, icon: ImageVector, onClick: () -> Unit) {
 @Composable
 private fun CapsuleCard(
     colorTag: ColorTag? = null,
+    onClick: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val consume = remember { MutableInteractionSource() }
     Surface(
-        modifier = Modifier
-            .width(CardWidth)
-            .clickable(interactionSource = consume, indication = null) { /* 消费点击，避免穿透关闭 */ },
+        modifier = Modifier.width(CardWidth),
+        onClick = onClick,
         shape = RoundedCornerShape(22.dp),
         color = CardBg,
         contentColor = CardText,
