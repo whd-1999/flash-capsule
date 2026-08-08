@@ -8,24 +8,25 @@ import android.view.View
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -54,15 +55,15 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.flashcapsule.R
 import com.flashcapsule.data.CaptureRepository
 import com.flashcapsule.model.Capsule
+import com.flashcapsule.model.ColorTag
 import com.flashcapsule.ui.theme.AppTheme
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
- * 真·悬浮面板：作为 overlay window 盖在**当前 App 之上**，不切走用户正在用的应用。
- * 一次性对象——dismiss 后需重新 new。自带最小 Lifecycle/SavedState/ViewModelStore 宿主，
- * 以便在非 Activity 环境里承载 Compose。
+ * 真·悬浮面板：全屏暗色遮罩 + 从右侧堆叠的独立"胶囊"卡片，盖在当前 App 之上。
+ * 一次性对象，dismiss 后需重新 new。
  */
 class OverlayPanel(
     private val context: Context,
@@ -105,13 +106,23 @@ class OverlayPanel(
             }
         }
 
+        // 覆盖整屏（含状态栏/挖孔区），避免顶部露出原界面造成割裂
+        val flags = WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
         val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
             overlayType(),
-            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            flags,
             PixelFormat.TRANSLUCENT,
-        )
+        ).apply {
+            gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            }
+        }
         windowManager.addView(compose, lp)
         root = compose
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
@@ -133,6 +144,8 @@ class OverlayPanel(
             @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
 }
 
+private val CardWidth = 300.dp
+
 @Composable
 private fun PanelContent(
     repo: CaptureRepository,
@@ -142,50 +155,65 @@ private fun PanelContent(
 ) {
     val flow = remember { repo.observeAll() }
     val capsules by flow.collectAsState(initial = emptyList())
+    val noRipple = remember { MutableInteractionSource() }
 
-    Row(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        // 全屏暗色遮罩：点它关闭
         Box(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .background(Color(0x66000000))
-                .clickable { onDismiss() }
+                .fillMaxSize()
+                .background(Color(0x99000000))
+                .clickable(interactionSource = noRipple, indication = null) { onDismiss() }
         )
-        Surface(
+
+        Column(
             modifier = Modifier
-                .width(330.dp)
-                .fillMaxHeight(),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 3.dp,
+                .align(Alignment.TopEnd)
+                .fillMaxHeight()
+                .padding(top = 44.dp, end = 12.dp, bottom = 28.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Column(Modifier.fillMaxSize().padding(16.dp)) {
-                Text("闪念胶囊", style = MaterialTheme.typography.titleMedium)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Button(onClick = onVoice, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Filled.Mic, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("说话")
-                    }
-                    FilledTonalButton(onClick = onText, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Filled.Keyboard, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("打字")
-                    }
+            Text(
+                "闪念胶囊",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White,
+                modifier = Modifier.padding(end = 4.dp, bottom = 2.dp),
+            )
+
+            // 顶部：说话 / 打字 两颗胶囊按钮
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PillButton("说话", Icons.Filled.Mic, onVoice)
+                PillButton("打字", Icons.Filled.Keyboard, onText)
+            }
+
+            if (capsules.isEmpty()) {
+                CapsuleCard {
+                    Text(
+                        "还没有胶囊 —— 点上面「说话/打字」记一条",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                if (capsules.isEmpty()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("还没有胶囊", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(capsules.take(30), key = { it.id }) { c ->
-                            PanelRow(c)
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.End,
+                ) {
+                    items(capsules.take(50), key = { it.id }) { c ->
+                        CapsuleCard(colorTag = c.colorTag) {
+                            Text(
+                                text = c.text.ifBlank { "(空)" },
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = 5,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(Modifier.padding(top = 2.dp))
+                            Text(
+                                text = fmt(c.createdAt) + " · " + c.source,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                 }
@@ -195,18 +223,62 @@ private fun PanelContent(
 }
 
 @Composable
-private fun PanelRow(capsule: Capsule) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(
-            text = capsule.text.ifBlank { "(空)" },
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = SimpleDateFormat("MM-dd HH:mm", Locale.US).format(Date(capsule.createdAt)),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+private fun PillButton(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        shadowElevation = 3.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null)
+            Spacer(Modifier.padding(start = 6.dp))
+            Text(label)
+        }
     }
 }
+
+@Composable
+private fun CapsuleCard(
+    colorTag: ColorTag? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val consume = remember { MutableInteractionSource() }
+    Surface(
+        modifier = Modifier
+            .width(CardWidth)
+            .clickable(interactionSource = consume, indication = null) { /* 消费点击，避免穿透关闭 */ },
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+        shadowElevation = 4.dp,
+    ) {
+        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+            if (colorTag != null) {
+                Box(
+                    Modifier
+                        .width(5.dp)
+                        .fillMaxHeight()
+                        .background(colorOf(colorTag))
+                )
+            }
+            Column(modifier = Modifier.padding(14.dp), content = content)
+        }
+    }
+}
+
+private fun colorOf(tag: ColorTag): Color = when (tag) {
+    ColorTag.RED -> Color(0xFFE53935)
+    ColorTag.ORANGE -> Color(0xFFFB8C00)
+    ColorTag.YELLOW -> Color(0xFFFDD835)
+    ColorTag.GREEN -> Color(0xFF43A047)
+    ColorTag.BLUE -> Color(0xFF1E88E5)
+    ColorTag.PURPLE -> Color(0xFF8E24AA)
+    ColorTag.GRAY -> Color(0xFF9E9E9E)
+}
+
+private fun fmt(t: Long): String =
+    SimpleDateFormat("MM-dd HH:mm", Locale.US).format(Date(t))
