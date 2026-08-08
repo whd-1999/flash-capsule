@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
@@ -64,22 +65,32 @@ class OverlayService : Service() {
         windowManager = getSystemService(WindowManager::class.java)
         val view = View(this).apply {
             background = GradientDrawable().apply {
-                cornerRadii = floatArrayOf(dp(6f), dp(6f), 0f, 0f, 0f, 0f, dp(6f), dp(6f))
-                setColor(0xCC6C4AB6.toInt())
+                cornerRadii = floatArrayOf(dp(14f), dp(14f), 0f, 0f, 0f, 0f, dp(14f), dp(14f))
+                setColor(0xF06C4AB6.toInt())
             }
         }
         val lp = WindowManager.LayoutParams(
-            dp(7f).toInt(),
-            dp(72f).toInt(),
+            dp(26f).toInt(),
+            dp(112f).toInt(),
             overlayType(),
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            x = dp(2f).toInt() // 略往里挪，避开最边缘的返回手势区
         }
         view.setOnTouchListener(dragAndTap(lp))
         windowManager.addView(view, lp)
         handle = view
+        // 把把手区域排除出系统返回/侧滑手势，让触摸落到把手上
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            view.post {
+                runCatching {
+                    view.systemGestureExclusionRects =
+                        listOf(Rect(0, 0, view.width, view.height))
+                }
+            }
+        }
     }
 
     private fun dragAndTap(lp: WindowManager.LayoutParams): View.OnTouchListener {
