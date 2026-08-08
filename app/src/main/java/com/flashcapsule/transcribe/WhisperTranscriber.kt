@@ -9,8 +9,18 @@ class WhisperTranscriber(private val context: Context) : Transcriber {
         val floats = AudioDecoder.decodeTo16kMonoFloat(audioPath)
         if (floats.isEmpty()) return ""
         val whisper = WhisperModel.ensureContext(context)
-        return whisper.transcribeData(floats, printTimestamp = false)
+        return whisper.transcribeData(floats, printTimestamp = false, language = whisperLang(lang))
             .trim()
             .replace(Regex("\\s+"), " ")
+    }
+
+    /** Settings 里的 BCP-47 代码 → whisper 语言代码；空 → 自动检测。 */
+    private fun whisperLang(lang: String?): String = when {
+        lang.isNullOrBlank() -> "auto"
+        lang.startsWith("zh", ignoreCase = true) -> "zh"
+        lang.startsWith("ja", ignoreCase = true) -> "ja"
+        lang.startsWith("en", ignoreCase = true) -> "en"
+        lang.startsWith("ko", ignoreCase = true) -> "ko"
+        else -> "auto"
     }
 }

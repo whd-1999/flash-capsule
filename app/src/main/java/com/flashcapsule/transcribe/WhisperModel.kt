@@ -10,12 +10,14 @@ import java.net.URL
 
 /**
  * 管理端上 Whisper 模型：首次使用时下载 ggml 模型到私有目录，缓存 WhisperContext。
- * 模型：small 多语种 q5_1（~190MB，中日英都还行）。
+ * 模型：base 多语种 q5_1（~57MB，中日英还行）。
+ * 选 base 而非 small：转写约快 3 倍，手机 CPU 上体验远好于 small，对"随手记"足够；
+ * 若之后需要更高准确率可再切回 ggml-small-q5_1.bin。
  */
 object WhisperModel {
-    private const val MODEL_NAME = "ggml-small-q5_1.bin"
+    private const val MODEL_NAME = "ggml-base-q5_1.bin"
     private const val MODEL_URL =
-        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin"
+        "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin"
 
     private val lock = Mutex()
     private var context: WhisperContext? = null
@@ -23,9 +25,16 @@ object WhisperModel {
     fun modelFile(ctx: Context): File = File(ctx.filesDir, MODEL_NAME)
     fun isDownloaded(ctx: Context): Boolean = modelFile(ctx).exists()
 
+    /** 删掉历史版本的旧模型文件（升级换模型时释放空间）。 */
+    fun cleanupLegacyModels(ctx: Context) {
+        val old = File(ctx.filesDir, "ggml-small-q5_1.bin")
+        if (old.exists()) old.delete()
+    }
+
     suspend fun ensureContext(ctx: Context, onProgress: (Int) -> Unit = {}): WhisperContext =
         lock.withLock {
             context?.let { return it }
+            cleanupLegacyModels(ctx)
             val f = modelFile(ctx)
             if (!f.exists()) download(f, onProgress)
             val c = WhisperContext.createContextFromFile(f.absolutePath)

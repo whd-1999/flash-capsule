@@ -24,6 +24,7 @@ class CaptureRepository(
     private val dao: CapsuleDao,
     private val sinks: SinkRegistry,
     private val transcriber: Transcriber,
+    private val settings: Settings,
     private val scope: CoroutineScope,
 ) {
     fun observeAll(): Flow<List<Capsule>> =
@@ -58,7 +59,8 @@ class CaptureRepository(
     }
 
     private suspend fun transcribeInto(id: String, audioPath: String) {
-        val text = runCatching { transcriber.transcribe(audioPath) }.getOrDefault("")
+        val lang = settings.sttLanguage
+        val text = runCatching { transcriber.transcribe(audioPath, lang) }.getOrDefault("")
         if (text.isNotBlank()) {
             val e = dao.byId(id) ?: return
             dao.upsert(

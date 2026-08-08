@@ -39,6 +39,7 @@ class FlashCapsuleApp : Application() {
             dao = db.capsuleDao(),
             sinks = sinks,
             transcriber = WhisperTranscriber(this),
+            settings = settings,
             scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
         )
     }
