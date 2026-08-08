@@ -173,6 +173,7 @@ fun CapsuleSheet(
     onDelete: () -> Unit,
     onShare: (String) -> Unit,
     onCalendar: (String) -> Unit,
+    onSearch: (String) -> Unit,
     onObsidian: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -239,6 +240,7 @@ fun CapsuleSheet(
                     IconButton(onClick = { onShare(text) }) { Icon(Icons.Filled.Share, "分享") }
                     IconButton(onClick = onObsidian) { Icon(Icons.Filled.Description, "落 Obsidian") }
                     IconButton(onClick = { onCalendar(text) }) { Icon(Icons.Filled.Event, "转日历") }
+                    IconButton(onClick = { onSearch(text) }) { Icon(Icons.Filled.Search, "搜索") }
                     IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, "删除", tint = SheetDelete) }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = onDismiss) { Text("取消", color = SheetSub) }
