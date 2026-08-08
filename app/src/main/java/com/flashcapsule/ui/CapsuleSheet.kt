@@ -236,13 +236,19 @@ fun CapsuleSheet(
                     }
                 }
                 Spacer(Modifier.height(14.dp))
+                // 5 个操作图标一行；取消/保存移到第二行，避免 340dp 宽度下一行塞不下被裁掉
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { onShare(text) }) { Icon(Icons.Filled.Share, "分享") }
                     IconButton(onClick = onObsidian) { Icon(Icons.Filled.Description, "落 Obsidian") }
                     IconButton(onClick = { onCalendar(text) }) { Icon(Icons.Filled.Event, "转日历") }
                     IconButton(onClick = { onSearch(text) }) { Icon(Icons.Filled.Search, "搜索") }
                     IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, "删除", tint = SheetDelete) }
-                    Spacer(Modifier.weight(1f))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     TextButton(onClick = onDismiss) { Text("取消", color = SheetSub) }
                     Spacer(Modifier.width(4.dp))
                     Button(onClick = { onSaveText(text) }) { Text("保存") }

@@ -66,6 +66,10 @@ fun InboxScreen(
     overlayOn: Boolean = false,
 ) {
     val context = LocalContext.current
+    val versionName = remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
+            .getOrNull()
+    }
     val capsules by vm.capsules.collectAsState()
     val query by vm.search.collectAsState()
     val lang by vm.lang.collectAsState()
@@ -76,7 +80,7 @@ fun InboxScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("闪念胶囊") },
+                title = { Text(if (versionName != null) "闪念胶囊 v$versionName" else "闪念胶囊") },
                 actions = {
                     IconButton(onClick = onToggleOverlay) {
                         Icon(
