@@ -1,6 +1,9 @@
 package com.flashcapsule.overlay
 
+import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.PixelFormat
 import android.os.Build
 import android.util.DisplayMetrics
@@ -23,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,6 +35,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -39,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -53,10 +59,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
@@ -69,24 +77,28 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.flashcapsule.R
+import com.flashcapsule.capture.MicPermissionActivity
+import com.flashcapsule.capture.SpeechCapture
 import com.flashcapsule.data.CaptureRepository
 import com.flashcapsule.model.Capsule
 import com.flashcapsule.model.ColorTag
+import com.flashcapsule.model.RawCapture
 import com.flashcapsule.ui.theme.AppTheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
- * 真·悬浮面板：全屏暗色遮罩 + 从右侧堆叠的独立"胶囊"卡片，盖在当前 App 之上。
+ * 真·悬浮面板：全屏遮罩 + 右侧堆叠的胶囊卡片，盖在当前 App 之上。
+ * 说话 = 直接开麦（SpeechRecognizer，不跳系统语音界面）；打字 = 面板内直接写。
  * 一次性对象，dismiss 后需重新 new。
  */
 class OverlayPanel(
     private val context: Context,
     private val repo: CaptureRepository,
-    private val onVoice: () -> Unit,
-    private val onText: () -> Unit,
+    private val langCode: String,
     private val onDismiss: () -> Unit,
 ) : LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
 
@@ -115,8 +127,7 @@ class OverlayPanel(
                 AppTheme {
                     PanelContent(
                         repo = repo,
-                        onVoice = { onVoice(); dismiss() },
-                        onText = { onText(); dismiss() },
+                        langCode = langCode,
                         onDismiss = { dismiss() },
                     )
                 }
@@ -170,7 +181,7 @@ class OverlayPanel(
 }
 
 private val CardWidth = 300.dp
-private val ScrimColor = Color(0x99000000)   // ~60% 黑，较浅
+private val ScrimColor = Color(0x99000000)
 private val CardBg = Color(0xFFF7F5FB)
 private val CardText = Color(0xFF1C1B1F)
 private val CardSub = Color(0xFF6B6673)
@@ -179,15 +190,57 @@ private val DeleteRed = Color(0xFFD32F2F)
 @Composable
 private fun PanelContent(
     repo: CaptureRepository,
-    onVoice: () -> Unit,
-    onText: () -> Unit,
+    langCode: String,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
     val flow = remember { repo.observeAll() }
     val capsules by flow.collectAsState(initial = emptyList())
     val noRipple = remember { MutableInteractionSource() }
     val scope = rememberCoroutineScope()
+
     var editing by remember { mutableStateOf<Capsule?>(null) }
+    var composingNew by remember { mutableStateOf(false) }
+    var listening by remember { mutableStateOf(false) }
+    var partial by remember { mutableStateOf("") }
+    var toast by remember { mutableStateOf<String?>(null) }
+
+    val speech = remember { SpeechCapture(context) }
+    DisposableEffect(Unit) { onDispose { speech.destroy() } }
+
+    fun startVoice() {
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            context.startActivity(
+                Intent(context, MicPermissionActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            toast = "已请求麦克风权限，授权后再点「说话」"
+            return
+        }
+        partial = ""
+        listening = true
+        speech.start(
+            langCode = langCode,
+            onPartial = { partial = it },
+            onFinal = { text ->
+                listening = false
+                if (text.isNotBlank()) {
+                    scope.launch { repo.ingest(RawCapture(text = text, source = "voice")) }
+                }
+            },
+            onError = { msg ->
+                listening = false
+                toast = msg
+            },
+        )
+    }
+
+    LaunchedEffect(toast) {
+        if (toast != null) { delay(2500); toast = null }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -247,16 +300,32 @@ private fun PanelContent(
                 }
             }
 
+            toast?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+
+            if (listening) {
+                Spacer(Modifier.height(10.dp))
+                ListeningCard(partial = partial, onStop = { speech.stop() })
+            }
+
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PillButton("说话", Icons.Filled.Mic, onVoice)
-                PillButton("打字", Icons.Filled.Keyboard, onText)
+                PillButton("说话", Icons.Filled.Mic) { startVoice() }
+                PillButton("打字", Icons.Filled.Keyboard) { composingNew = true }
             }
         }
 
         editing?.let { cap ->
             EditSheet(
-                capsule = cap,
+                title = "编辑胶囊",
+                initialText = cap.text,
+                showDelete = true,
                 onSave = { newText ->
                     scope.launch { repo.updateText(cap.id, newText) }
                     editing = null
@@ -268,18 +337,64 @@ private fun PanelContent(
                 onDismiss = { editing = null },
             )
         }
+
+        if (composingNew) {
+            EditSheet(
+                title = "新胶囊",
+                initialText = "",
+                showDelete = false,
+                onSave = { newText ->
+                    if (newText.isNotBlank()) {
+                        scope.launch { repo.ingest(RawCapture(text = newText, source = "app")) }
+                    }
+                    composingNew = false
+                },
+                onDelete = {},
+                onDismiss = { composingNew = false },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ListeningCard(partial: String, onStop: () -> Unit) {
+    Surface(
+        modifier = Modifier.width(CardWidth),
+        shape = RoundedCornerShape(22.dp),
+        color = CardBg,
+        contentColor = CardText,
+        shadowElevation = 4.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = partial.ifBlank { "聆听中…" },
+                color = CardText,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onStop) { Text("停止") }
+        }
     }
 }
 
 @Composable
 private fun EditSheet(
-    capsule: Capsule,
+    title: String,
+    initialText: String,
+    showDelete: Boolean,
     onSave: (String) -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val noRipple = remember { MutableInteractionSource() }
-    var text by remember(capsule.id) { mutableStateOf(capsule.text) }
+    var text by remember { mutableStateOf(initialText) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
@@ -300,7 +415,7 @@ private fun EditSheet(
             shadowElevation = 8.dp,
         ) {
             Column(Modifier.padding(16.dp)) {
-                Text("编辑胶囊", style = MaterialTheme.typography.titleMedium, color = CardText)
+                Text(title, style = MaterialTheme.typography.titleMedium, color = CardText)
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
                     value = text,
@@ -319,7 +434,9 @@ private fun EditSheet(
                 )
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onDelete) { Text("删除", color = DeleteRed) }
+                    if (showDelete) {
+                        TextButton(onClick = onDelete) { Text("删除", color = DeleteRed) }
+                    }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = onDismiss) { Text("取消", color = CardSub) }
                     Spacer(Modifier.width(4.dp))
@@ -329,7 +446,7 @@ private fun EditSheet(
         }
     }
 
-    LaunchedEffect(capsule.id) {
+    LaunchedEffect(Unit) {
         focus.requestFocus()
         keyboard?.show()
     }

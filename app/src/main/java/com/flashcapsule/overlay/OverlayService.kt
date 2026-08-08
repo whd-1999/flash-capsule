@@ -18,7 +18,6 @@ import android.view.View
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import com.flashcapsule.FlashCapsuleApp
-import com.flashcapsule.ui.CaptureActivity
 import kotlin.math.abs
 
 /**
@@ -125,22 +124,13 @@ class OverlayService : Service() {
             current.dismiss()
             return
         }
-        val repo = FlashCapsuleApp.from(this).repository
+        val app = FlashCapsuleApp.from(this)
         panel = OverlayPanel(
             context = this,
-            repo = repo,
-            onVoice = { startCapture(voice = true) },
-            onText = { startCapture(voice = false) },
+            repo = app.repository,
+            langCode = app.settings.sttLanguage,
             onDismiss = { panel = null },
         ).also { it.show() }
-    }
-
-    private fun startCapture(voice: Boolean) {
-        startActivity(
-            Intent(this, CaptureActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                .putExtra(CaptureActivity.EXTRA_VOICE, voice)
-        )
     }
 
     override fun onDestroy() {

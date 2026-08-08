@@ -32,6 +32,11 @@
             android:theme="@style/Theme.FlashCapsule" />
 
         <activity
+            android:name=".capture.MicPermissionActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <activity
             android:name=".ui.PanelActivity"
             android:exported="false"
             android:excludeFromRecents="true"
