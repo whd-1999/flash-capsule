@@ -79,6 +79,7 @@ class OverlayService : Service() {
         ).apply {
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
             x = dp(2f).toInt() // 略往里挪，避开最边缘的返回手势区
+            y = FlashCapsuleApp.from(this@OverlayService).settings.handleY // 恢复上次位置
         }
         view.setOnTouchListener(dragAndTap(lp))
         windowManager.addView(view, lp)
@@ -111,6 +112,7 @@ class OverlayService : Service() {
                 }
                 MotionEvent.ACTION_UP -> {
                     if (!moved) openPanel()
+                    else FlashCapsuleApp.from(this@OverlayService).settings.handleY = lp.y
                     true
                 }
                 else -> false

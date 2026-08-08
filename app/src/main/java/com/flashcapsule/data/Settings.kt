@@ -31,8 +31,14 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(KEY_OVERLAY, false)
         set(value) { prefs.edit().putBoolean(KEY_OVERLAY, value).apply() }
 
+    /** 把手竖直位置偏移（相对屏幕中心），记忆用户拖动后的位置。 */
+    var handleY: Int
+        get() = prefs.getInt(KEY_HANDLE_Y, 0)
+        set(value) { prefs.edit().putInt(KEY_HANDLE_Y, value).apply() }
+
     companion object {
         private const val KEY_LANG = "stt_language"
         private const val KEY_OVERLAY = "overlay_enabled"
+        private const val KEY_HANDLE_Y = "handle_y"
     }
 }

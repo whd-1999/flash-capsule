@@ -13,16 +13,21 @@ Android 上的**零决策全局捕获**工具 —— 复刻锤子「闪念胶囊
 3. 捕获与处理分离
 
 ## 技术栈
-Kotlin · Jetpack Compose · Room · whisper.cpp（端上）· WorkManager · Koin
+Kotlin · Jetpack Compose · Room · whisper.cpp（端上，NDK/CMake）· 手动 DI（ServiceLocator，不引 Koin/Hilt）
 
 ## 文档
 - [ARCHITECTURE.md](./ARCHITECTURE.md) —— 完整架构：模块划分、数据模型、
   CaptureSource/Sink 接口、捕获入口、省电策略、公开 Intent API、复用计划、里程碑。
+- [DESIGN_FROM_VIDEO.md](./DESIGN_FROM_VIDEO.md) —— 逐帧反推的原版设计
+- [CHANGELOG.md](./CHANGELOG.md) —— 版本历史
 
 ## 状态
-📐 架构设计完成，待开工。基座候选：fork [NotelyVoice](https://github.com/Notely-Voice/NotelyVoice)（注意 GPL-3.0）。
+✅ 可用的 MVP（v0.10.0）：悬浮把手（可拖、位置记忆）+ 边缘弹出面板 +
+录音/波形/回放 + **端上 Whisper 离线转写**（arm64）+ 5 分类色标 +
+操作栏（分享 / 落 Obsidian / 转日历 / 删除 / 网页搜索）。全程零位图，纯 Compose 绘制。
 
 ## 里程碑
-- **v1**（MVP）：助手唤起 + 分享输入 + 系统 STT + Room/Inbox + ObsidianSink
-- **v2**：端上 Whisper + LLM 标题/分类 + Intent API + 磁贴/Widget
-- **v3**：语义搜索 + 同步 + 提醒/附件 + 悬浮 UI
+- **v0.1–v0.3** ✅ MVP 骨架：Room/Inbox、分享/磁贴/广播捕获、悬浮把手 + 边缘面板
+- **v0.4–v0.6** ✅ 语音对齐原版：直接收音、录音 + 波形 + 回放（存声音）
+- **v0.7–v0.10** ✅ 端上 AI + 交互完善：5 分类、操作栏、Whisper 离线转写、把手位置记忆、网页搜索
+- **v3** ⏳ 规划中：LLM 自动标题/分类、SAF 直接落 vault、ContentProvider 读接口、语义搜索 + 同步

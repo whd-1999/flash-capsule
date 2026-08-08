@@ -2,6 +2,7 @@ package com.flashcapsule.ui
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.provider.CalendarContract
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -102,6 +104,13 @@ fun capsuleAddToCalendar(context: Context, text: String) {
         putExtra(CalendarContract.Events.TITLE, text)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
+    runCatching { context.startActivity(i) }
+}
+
+fun capsuleWebSearch(context: Context, text: String) {
+    if (text.isBlank()) return
+    val i = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=${Uri.encode(text)}"))
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(i) }
 }
 

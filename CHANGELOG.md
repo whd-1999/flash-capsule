@@ -5,11 +5,17 @@
 
 ## [Unreleased]
 ### Planned
-- 端上 Whisper 离线转写（whisper.cpp + NDK）
 - LLM 自动标题 / 自动分类
 - ObsidianSink 改用 SAF 目录选择器（直接落 vault）
 - ContentProvider 读接口（供自动化脚本拉取）
-- 把手拖到左缘 / 边缘位置记忆；面板内直接编辑/删除
+- 把手拖到左缘吸附
+
+## [0.10.0] - 2026-08-09
+### Added
+- **侧边把手位置记忆**：拖动把手后记录位置，悬浮窗重开后恢复到原处（Settings.handleY）
+- **胶囊内网页搜索**：展开胶囊操作栏加「搜索」按钮，一键 Google 搜当前文字
+### Changed
+- versionCode/versionName → 10 / 0.10.0
 
 ## [0.9.0] - 2026-08-09
 ### Added
