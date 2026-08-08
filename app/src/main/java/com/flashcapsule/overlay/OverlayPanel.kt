@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
 import android.os.Build
+import android.provider.CalendarContract
 import android.util.DisplayMetrics
 import android.view.ContextThemeWrapper
 import android.view.Gravity
@@ -34,13 +35,24 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -341,12 +353,16 @@ private fun PanelContent(repo: CaptureRepository, onDismiss: () -> Unit) {
         }
 
         editing?.let { cap ->
-            EditSheet(
-                title = "编辑胶囊",
-                initialText = cap.text,
-                showDelete = true,
-                onSave = { t -> scope.launch { repo.updateText(cap.id, t) }; editing = null },
+            CapsuleSheet(
+                capsule = cap,
+                playing = playing == cap.audioPath,
+                onPlay = { cap.audioPath?.let { p -> AudioPlayer.toggle(p) { playing = AudioPlayer.currentPath } } },
+                onSetColor = { tag -> scope.launch { repo.setColor(cap.id, tag) } },
+                onSaveText = { t -> scope.launch { repo.updateText(cap.id, t) }; editing = null },
                 onDelete = { scope.launch { repo.delete(cap.id) }; editing = null },
+                onShare = { t -> shareText(context, t); editing = null },
+                onCalendar = { t -> addToCalendar(context, t); editing = null },
+                onObsidian = { scope.launch { repo.exportTo("obsidian", cap.id) }; editing = null },
                 onDismiss = { editing = null },
             )
         }
@@ -430,6 +446,160 @@ private fun Waveform(samples: List<Int>, color: Color, modifier: Modifier = Modi
             )
         }
     }
+}
+
+private data class Category(
+    val label: String,
+    val tag: ColorTag,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+)
+
+private val Categories = listOf(
+    Category("便签", ColorTag.BLUE, Icons.Filled.Description),
+    Category("重要", ColorTag.RED, Icons.Filled.PriorityHigh),
+    Category("待办", ColorTag.ORANGE, Icons.Filled.CheckCircle),
+    Category("待发送", ColorTag.GREEN, Icons.Filled.Chat),
+    Category("灵感", ColorTag.PURPLE, Icons.Filled.Lightbulb),
+)
+
+private fun shareText(context: Context, text: String) {
+    if (text.isBlank()) return
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    runCatching {
+        context.startActivity(Intent.createChooser(send, "分享").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+}
+
+private fun addToCalendar(context: Context, text: String) {
+    val i = Intent(Intent.ACTION_INSERT).apply {
+        data = CalendarContract.Events.CONTENT_URI
+        putExtra(CalendarContract.Events.TITLE, text)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    runCatching { context.startActivity(i) }
+}
+
+/** 展开的胶囊：顶部 5 分类色标 + 文字/波形/播放 + 底部操作栏。 */
+@Composable
+private fun CapsuleSheet(
+    capsule: Capsule,
+    playing: Boolean,
+    onPlay: () -> Unit,
+    onSetColor: (ColorTag) -> Unit,
+    onSaveText: (String) -> Unit,
+    onDelete: () -> Unit,
+    onShare: (String) -> Unit,
+    onCalendar: (String) -> Unit,
+    onObsidian: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val noRipple = remember { MutableInteractionSource() }
+    var text by remember { mutableStateOf(capsule.text) }
+    var color by remember { mutableStateOf(capsule.colorTag) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xB3000000))
+            .clickable(interactionSource = noRipple, indication = null) { onDismiss() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            modifier = Modifier
+                .width(340.dp)
+                .clickable(interactionSource = noRipple, indication = null) { },
+            shape = RoundedCornerShape(20.dp),
+            color = CardBg,
+            contentColor = CardText,
+            shadowElevation = 8.dp,
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Categories.forEach { c ->
+                        CategoryDot(c.tag, c.icon, selected = color == c.tag) {
+                            color = c.tag; onSetColor(c.tag)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("（语音胶囊，转写后自动填字）", color = CardSub) },
+                    textStyle = TextStyle(color = CardText),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = CardText,
+                        unfocusedTextColor = CardText,
+                        cursorColor = CardText,
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                    ),
+                )
+                if (capsule.audioPath != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        PlayDot(isPlaying = playing, onClick = onPlay)
+                        Spacer(Modifier.width(8.dp))
+                        Waveform(
+                            samples = capsule.waveform,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f).height(28.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ActionIcon(Icons.Filled.Share, "分享") { onShare(text) }
+                    ActionIcon(Icons.Filled.Description, "落 Obsidian") { onObsidian() }
+                    ActionIcon(Icons.Filled.Event, "转日历") { onCalendar(text) }
+                    ActionIcon(Icons.Filled.Delete, "删除", DeleteRed) { onDelete() }
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onDismiss) { Text("取消", color = CardSub) }
+                    Spacer(Modifier.width(4.dp))
+                    Button(onClick = { onSaveText(text) }) { Text("保存") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryDot(
+    tag: ColorTag,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = colorOf(tag),
+        contentColor = Color.White,
+        modifier = Modifier
+            .size(42.dp)
+            .then(if (selected) Modifier.border(BorderStroke(2.5.dp, CardText), CircleShape) else Modifier),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun ActionIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    desc: String,
+    tint: Color = CardText,
+    onClick: () -> Unit,
+) {
+    IconButton(onClick = onClick) { Icon(icon, contentDescription = desc, tint = tint) }
 }
 
 @Composable
