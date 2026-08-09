@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import android.provider.DocumentsContract
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +43,19 @@ class MainActivity : ComponentActivity() {
                         overlayOn = true
                     }
                 }
+                val vaultLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.OpenDocumentTree()
+                ) { uri ->
+                    if (uri != null) {
+                        try {
+                            contentResolver.takePersistableUriPermission(
+                                uri,
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                            )
+                        } catch (_: SecurityException) {}
+                        app.settings.vaultUri = uri.toString()
+                    }
+                }
                 InboxScreen(
                     vm = vm,
                     onCapture = { startActivity(Intent(this, CaptureActivity::class.java)) },
@@ -59,6 +73,7 @@ class MainActivity : ComponentActivity() {
                             OverlayService.start(context)
                         }
                     },
+                    onPickVaultDir = { vaultLauncher.launch(null) },
                     onToggleOverlay = {
                         if (overlayOn) {
                             OverlayService.stop(context)

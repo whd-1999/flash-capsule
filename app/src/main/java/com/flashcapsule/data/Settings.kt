@@ -61,6 +61,11 @@ class Settings(context: Context) {
         get() = prefs.getLong(KEY_AUTO_ENRICH, 0L)
         set(value) { prefs.edit().putLong(KEY_AUTO_ENRICH, value).apply() }
 
+    /** Obsidian vault 目录（SAF 持久化 Uri）；空 = 用 app 私有目录。 */
+    var vaultUri: String
+        get() = prefs.getString(KEY_VAULT_URI, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_VAULT_URI, value).apply() }
+
     companion object {
         private const val KEY_LANG = "stt_language"
         private const val KEY_OVERLAY = "overlay_enabled"
@@ -70,5 +75,6 @@ class Settings(context: Context) {
         private const val KEY_LAST_PURGE = "last_trash_purge"
         private const val KEY_AI_ERROR = "ai_error"
         private const val KEY_AUTO_ENRICH = "auto_enrich_at"
+        private const val KEY_VAULT_URI = "vault_uri"
     }
 }

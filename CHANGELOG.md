@@ -5,8 +5,14 @@
 
 ## [Unreleased]
 ### Planned
-- ObsidianSink 改用 SAF 目录选择器（直接落 vault）
 - ContentProvider 读接口（供自动化脚本拉取）
+
+## [0.15.0] - 2026-08-09
+### Added
+- **ObsidianSink SAF 目录选择器**：设置里「选择目录」选 Obsidian vault 文件夹，
+  落 Obsidian 直接写进 vault（持久化权限）；未选择时回退到 app 私有目录
+### Changed
+- versionCode/versionName → 18 / 0.15.0
 
 ## [0.14.0] - 2026-08-09
 ### Added

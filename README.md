@@ -37,4 +37,5 @@ Kotlin · Jetpack Compose · Room · whisper.cpp（端上，NDK/CMake）· 手�
 - **v0.12** ✅ 转写加速（base 模型）+ 语言参数接通
 - **v0.13** ✅ 回收站 + 已完成勾选 + LLM 自动标题/分类
 - **v0.14** ✅ 播放控制条 + 把手左右切换
+- **v0.15** ✅ ObsidianSink SAF 目录选择器（直接落 vault）
 - **待做** ⏳：SAF 直接落 vault、ContentProvider 读接口、语义搜索 + 同步

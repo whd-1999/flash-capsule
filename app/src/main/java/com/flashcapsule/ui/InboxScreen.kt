@@ -74,6 +74,7 @@ fun InboxScreen(
     onVoiceCapture: () -> Unit = {},
     onToggleOverlay: () -> Unit = {},
     onHandleSideChanged: () -> Unit = {},
+    onPickVaultDir: () -> Unit = {},
     overlayOn: Boolean = false,
 ) {
     val context = LocalContext.current
@@ -254,6 +255,7 @@ fun InboxScreen(
                 vm.toggleHandleSide()
                 onHandleSideChanged()
             },
+            onPickVaultDir = onPickVaultDir,
             onDismiss = { showSettings = false },
         )
     }
@@ -418,6 +420,7 @@ private fun SettingsDialog(
     handleLeft: Boolean,
     onSave: (String) -> Unit,
     onToggleHandleSide: () -> Unit,
+    onPickVaultDir: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var key by remember { mutableStateOf(apiKey) }
@@ -460,6 +463,12 @@ private fun SettingsDialog(
                         onClick = { if (!handleLeft) onToggleHandleSide() },
                         label = { Text("左手") },
                     )
+                }
+                Spacer(Modifier.height(14.dp))
+                Text("Obsidian vault 目录", style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.height(4.dp))
+                TextButton(onClick = onPickVaultDir) {
+                    Text("选择目录…")
                 }
             }
         },

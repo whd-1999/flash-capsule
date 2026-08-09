@@ -33,7 +33,7 @@ class FlashCapsuleApp : Application() {
             .build()
         val sinks = SinkRegistry(
             listOf(
-                ObsidianSink(this, auto = false), // 需要自动落 vault 时改 auto = true
+                ObsidianSink(this, settings, auto = false), // 需要自动落 vault 时改 auto = true
                 ShareSink(this),
             )
         )
