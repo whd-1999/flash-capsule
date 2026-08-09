@@ -73,6 +73,7 @@ fun InboxScreen(
     onCapture: () -> Unit,
     onVoiceCapture: () -> Unit = {},
     onToggleOverlay: () -> Unit = {},
+    onHandleSideChanged: () -> Unit = {},
     overlayOn: Boolean = false,
 ) {
     val context = LocalContext.current
@@ -85,6 +86,7 @@ fun InboxScreen(
     val lang by vm.lang.collectAsState()
     val apiKey by vm.apiKey.collectAsState()
     val aiError by vm.aiError.collectAsState()
+    val handleLeft by vm.handleLeft.collectAsState()
     val filter by vm.filterState.collectAsState()
     val trash by vm.trash.collectAsState()
     var showLangDialog by remember { mutableStateOf(false) }
@@ -246,7 +248,12 @@ fun InboxScreen(
         SettingsDialog(
             apiKey = apiKey,
             aiError = aiError,
+            handleLeft = handleLeft,
             onSave = { vm.setApiKey(it); showSettings = false },
+            onToggleHandleSide = {
+                vm.toggleHandleSide()
+                onHandleSideChanged()
+            },
             onDismiss = { showSettings = false },
         )
     }
@@ -408,7 +415,9 @@ private fun TrashCard(
 private fun SettingsDialog(
     apiKey: String,
     aiError: String,
+    handleLeft: Boolean,
     onSave: (String) -> Unit,
+    onToggleHandleSide: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var key by remember { mutableStateOf(apiKey) }
@@ -435,6 +444,21 @@ private fun SettingsDialog(
                         "最近一次 AI 失败：$aiError",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFFD32F2F),
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+                Text("把手位置", style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = !handleLeft,
+                        onClick = { if (handleLeft) onToggleHandleSide() },
+                        label = { Text("右手") },
+                    )
+                    FilterChip(
+                        selected = handleLeft,
+                        onClick = { if (!handleLeft) onToggleHandleSide() },
+                        label = { Text("左手") },
                     )
                 }
             }

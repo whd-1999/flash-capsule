@@ -7,7 +7,13 @@
 ### Planned
 - ObsidianSink 改用 SAF 目录选择器（直接落 vault）
 - ContentProvider 读接口（供自动化脚本拉取）
-- 把手拖到左缘吸附
+
+## [0.14.0] - 2026-08-09
+### Added
+- **播放控制条**：语音胶囊展开后，波形下方加进度 Slider（可拖动 seek）+ 当前/总时长
+- **把手可放左手**：设置里切换「右手/左手」，把手、悬浮面板、边缘面板都跟到对应侧
+### Changed
+- versionCode/versionName → 17 / 0.14.0
 
 ## [0.13.1] - 2026-08-09
 ### Fixed

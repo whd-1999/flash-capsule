@@ -67,6 +67,7 @@ class PanelActivity : ComponentActivity() {
                 )
                 EdgePanel(
                     vm = vm,
+                    leftHanded = app.settings.handleLeft,
                     onDismiss = { finish() },
                     onOpenApp = {
                         startActivity(Intent(this, MainActivity::class.java))
@@ -80,7 +81,12 @@ class PanelActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EdgePanel(vm: InboxViewModel, onDismiss: () -> Unit, onOpenApp: () -> Unit) {
+private fun EdgePanel(
+    vm: InboxViewModel,
+    leftHanded: Boolean,
+    onDismiss: () -> Unit,
+    onOpenApp: () -> Unit,
+) {
     val capsules by vm.capsules.collectAsState()
     val lang by vm.lang.collectAsState()
     val visible = remember { mutableStateOf(true) }
@@ -94,68 +100,61 @@ private fun EdgePanel(vm: InboxViewModel, onDismiss: () -> Unit, onOpenApp: () -
     }
 
     Row(modifier = Modifier.fillMaxSize()) {
-        // 左侧遮罩：点它关闭
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .background(Color(0x66000000))
-                .clickable { onDismiss() }
-        )
-        AnimatedVisibility(
-            visible = visible.value,
-            enter = slideInHorizontally(initialOffsetX = { it }),
-        ) {
-            Surface(
-                modifier = Modifier
-                    .width(330.dp)
-                    .fillMaxHeight(),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 3.dp,
+        if (leftHanded) {
+            AnimatedVisibility(
+                visible = visible.value,
+                enter = slideInHorizontally(initialOffsetX = { -it }),
             ) {
-                Column(Modifier.fillMaxSize().padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("闪念胶囊", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.weight(1f))
-                        IconButton(onClick = onOpenApp) {
-                            Icon(Icons.Filled.OpenInNew, contentDescription = "打开主界面")
-                        }
+                Surface(
+                    modifier = Modifier
+                        .width(330.dp)
+                        .fillMaxHeight(),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 3.dp,
+                ) {
+                    Column(Modifier.fillMaxSize().padding(16.dp)) {
+                        EdgePanelContent(
+                            onOpenApp = onOpenApp,
+                            onSpeak = { voice.launch(speechIntent(lang)) },
+                            capsules = capsules,
+                        )
                     }
-                    Spacer(Modifier.width(0.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Button(
-                            onClick = { voice.launch(speechIntent(lang)) },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Icon(Icons.Filled.Mic, contentDescription = null)
-                            Spacer(Modifier.width(6.dp))
-                            Text("说话")
-                        }
-                        FilledTonalButton(
-                            onClick = onOpenApp,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Icon(Icons.Filled.Keyboard, contentDescription = null)
-                            Spacer(Modifier.width(6.dp))
-                            Text("打字")
-                        }
-                    }
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    if (capsules.isEmpty()) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("还没有胶囊", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    } else {
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            items(capsules.take(30), key = { it.id }) { c ->
-                                PanelRow(c)
-                            }
-                        }
+                }
+            }
+            // 右侧遮罩：点它关闭
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .background(Color(0x66000000))
+                    .clickable { onDismiss() }
+            )
+        } else {
+            // 右侧遮罩：点它关闭
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .background(Color(0x66000000))
+                    .clickable { onDismiss() }
+            )
+            AnimatedVisibility(
+                visible = visible.value,
+                enter = slideInHorizontally(initialOffsetX = { it }),
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .width(330.dp)
+                        .fillMaxHeight(),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 3.dp,
+                ) {
+                    Column(Modifier.fillMaxSize().padding(16.dp)) {
+                        EdgePanelContent(
+                            onOpenApp = onOpenApp,
+                            onSpeak = { voice.launch(speechIntent(lang)) },
+                            capsules = capsules,
+                        )
                     }
                 }
             }
@@ -163,6 +162,56 @@ private fun EdgePanel(vm: InboxViewModel, onDismiss: () -> Unit, onOpenApp: () -
     }
 }
 
+@Composable
+private fun EdgePanelContent(
+    onOpenApp: () -> Unit,
+    onSpeak: () -> Unit,
+    capsules: List<Capsule>,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("闪念胶囊", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.weight(1f))
+        IconButton(onClick = onOpenApp) {
+            Icon(Icons.Filled.OpenInNew, contentDescription = "打开主界面")
+        }
+    }
+    Spacer(Modifier.width(0.dp))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Button(
+            onClick = onSpeak,
+            modifier = Modifier.weight(1f),
+        ) {
+            Icon(Icons.Filled.Mic, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text("说话")
+        }
+        FilledTonalButton(
+            onClick = onOpenApp,
+            modifier = Modifier.weight(1f),
+        ) {
+            Icon(Icons.Filled.Keyboard, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text("打字")
+        }
+    }
+    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+    if (capsules.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("还没有胶囊", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    } else {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(capsules.take(30), key = { it.id }) { c ->
+                PanelRow(c)
+            }
+        }
+    }
+}
 @Composable
 private fun PanelRow(capsule: Capsule) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {

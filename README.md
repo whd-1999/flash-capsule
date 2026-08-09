@@ -22,9 +22,9 @@ Kotlin · Jetpack Compose · Room · whisper.cpp（端上，NDK/CMake）· 手�
 - [CHANGELOG.md](./CHANGELOG.md) —— 版本历史
 
 ## 状态
-✅ 可用的 MVP（v0.13.0）：悬浮把手（可拖、位置记忆）+ 边缘弹出面板 +
-录音/波形/回放 + **端上 Whisper 离线转写**（arm64）+ 5 分类色标 +
-操作栏（分享 / 落 Obsidian / 转日历 / 删除）+ **展开即自动网络搜索**
+✅ 可用的 MVP（v0.14.0）：悬浮把手（可拖、位置记忆、可切左右手）+ 边缘弹出面板 +
+录音/波形/回放 + **播放控制条**（进度 Slider + 时间）+ **端上 Whisper 离线转写**（arm64）+
+5 分类色标 + 操作栏（分享 / 落 Obsidian / 转日历 / 删除）+ **展开即自动网络搜索**
 （Wikipedia 摘要 + Google/百度/Bing/维基引擎切换）+ **回收站（30天）** +
 **已完成勾选与筛选** + **LLM 自动标题/分类**（DeepSeek API，可选）。
 全程零位图，纯 Compose 绘制。
@@ -36,4 +36,5 @@ Kotlin · Jetpack Compose · Room · whisper.cpp（端上，NDK/CMake）· 手�
 - **v0.11** ✅ 原版自动网络搜索面板
 - **v0.12** ✅ 转写加速（base 模型）+ 语言参数接通
 - **v0.13** ✅ 回收站 + 已完成勾选 + LLM 自动标题/分类
+- **v0.14** ✅ 播放控制条 + 把手左右切换
 - **待做** ⏳：SAF 直接落 vault、ContentProvider 读接口、语义搜索 + 同步

@@ -43,6 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -50,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -64,6 +66,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.flashcapsule.capture.AudioPlayer
 import com.flashcapsule.model.Capsule
 import com.flashcapsule.model.CapsuleStatus
 import com.flashcapsule.model.ColorTag
@@ -251,6 +254,58 @@ fun CapsulePlayDot(isPlaying: Boolean, onClick: () -> Unit) {
     }
 }
 
+/** 播放控制条：播放/暂停 + 波形 + 进度 Slider（可拖动）+ 时间。 */
+@Composable
+private fun PlaybackControl(
+    playing: Boolean,
+    onPlay: () -> Unit,
+    waveform: List<Int>,
+) {
+    var position by remember { mutableLongStateOf(0L) }
+    var duration by remember { mutableLongStateOf(0L) }
+
+    // 播放时每 200ms 刷新一次进度
+    LaunchedEffect(playing) {
+        if (!playing) return@LaunchedEffect
+        while (true) {
+            position = AudioPlayer.position().toLong()
+            if (duration == 0L) duration = AudioPlayer.duration().toLong()
+            kotlinx.coroutines.delay(200)
+        }
+    }
+
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CapsulePlayDot(isPlaying = playing, onClick = onPlay)
+            Spacer(Modifier.width(8.dp))
+            CapsuleWaveform(
+                samples = waveform,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f).height(28.dp),
+            )
+        }
+        if (duration > 0) {
+            Slider(
+                value = position.coerceIn(0, duration).toFloat(),
+                onValueChange = { AudioPlayer.seekTo(it.toInt()) },
+                valueRange = 0f..duration.toFloat(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(fmtMs(position), style = MaterialTheme.typography.labelSmall, color = SheetSub)
+                Text(fmtMs(duration), style = MaterialTheme.typography.labelSmall, color = SheetSub)
+            }
+        }
+    }
+}
+
+private fun fmtMs(ms: Long): String {
+    val totalSec = ms / 1000
+    return "%d:%02d".format(totalSec / 60, totalSec % 60)
+}
+
 /** 语音胶囊未出字时显示的进度提示：转写中… / 模型下载 x%…。 */
 @Composable
 fun CapsuleTranscribeHint(capsule: Capsule, textColor: Color = SheetSub) {
@@ -344,15 +399,11 @@ fun CapsuleSheet(
                 )
                 if (capsule.audioPath != null) {
                     Spacer(Modifier.height(10.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CapsulePlayDot(isPlaying = playing, onClick = onPlay)
-                        Spacer(Modifier.width(8.dp))
-                        CapsuleWaveform(
-                            samples = capsule.waveform,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f).height(28.dp),
-                        )
-                    }
+                    PlaybackControl(
+                        playing = playing,
+                        onPlay = onPlay,
+                        waveform = capsule.waveform,
+                    )
                 }
                 if (capsule.tags.isNotEmpty()) {
                     Spacer(Modifier.height(10.dp))

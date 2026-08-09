@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -94,6 +95,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.flashcapsule.FlashCapsuleApp
 import com.flashcapsule.R
 import com.flashcapsule.capture.AudioPlayer
 import com.flashcapsule.capture.AudioRecorder
@@ -150,7 +152,10 @@ class OverlayPanel(
             setViewTreeViewModelStoreOwner(this@OverlayPanel)
             setViewTreeSavedStateRegistryOwner(this@OverlayPanel)
             setContent {
-                AppTheme { PanelContent(repo = repo, onDismiss = { dismiss() }) }
+                AppTheme {
+                    val left = FlashCapsuleApp.from(context).settings.handleLeft
+                    PanelContent(repo = repo, leftHanded = left, onDismiss = { dismiss() })
+                }
             }
         }
 
@@ -206,12 +211,15 @@ private val DeleteRed = Color(0xFFD32F2F)
 private val RecRed = Color(0xFFE53935)
 
 @Composable
-private fun PanelContent(repo: CaptureRepository, onDismiss: () -> Unit) {
+private fun PanelContent(repo: CaptureRepository, leftHanded: Boolean, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val flow = remember { repo.observeAll() }
     val capsules by flow.collectAsState(initial = emptyList())
     val noRipple = remember { MutableInteractionSource() }
     val scope = rememberCoroutineScope()
+    // 靠哪一侧堆叠：右手靠右（BottomEnd），左手靠左（BottomStart）
+    val bottomAlign = if (leftHanded) Alignment.BottomStart else Alignment.BottomEnd
+    val hAlign = if (leftHanded) Alignment.Start else Alignment.End
 
     val recorder = remember { AudioRecorder(context) }
     val fileStore = remember { FileStore(context) }
@@ -287,16 +295,16 @@ private fun PanelContent(repo: CaptureRepository, onDismiss: () -> Unit) {
 
         Column(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(top = 52.dp, end = 12.dp, bottom = 36.dp),
-            horizontalAlignment = Alignment.End,
+                .align(bottomAlign)
+                .padding(top = 52.dp, start = if (leftHanded) 12.dp else 0.dp, end = if (leftHanded) 0.dp else 12.dp, bottom = 36.dp),
+            horizontalAlignment = hAlign,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 "闪念胶囊",
                 style = MaterialTheme.typography.labelLarge,
                 color = Color.White,
-                modifier = Modifier.padding(end = 4.dp),
+                modifier = Modifier.padding(if (leftHanded) PaddingValues(start = 4.dp) else PaddingValues(end = 4.dp)),
             )
 
             if (capsules.isEmpty()) {
@@ -307,7 +315,7 @@ private fun PanelContent(repo: CaptureRepository, onDismiss: () -> Unit) {
                 LazyColumn(
                     modifier = Modifier.heightIn(max = 440.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.End,
+                    horizontalAlignment = hAlign,
                 ) {
                     items(capsules.take(50), key = { it.id }) { c ->
                         CapsuleCard(colorTag = c.colorTag, onClick = { editing = c }) {

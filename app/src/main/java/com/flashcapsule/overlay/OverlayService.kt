@@ -64,9 +64,15 @@ class OverlayService : Service() {
 
     private fun addHandle() {
         windowManager = getSystemService(WindowManager::class.java)
+        val left = FlashCapsuleApp.from(this@OverlayService).settings.handleLeft
         val view = View(this).apply {
             background = GradientDrawable().apply {
-                cornerRadii = floatArrayOf(dp(14f), dp(14f), 0f, 0f, 0f, 0f, dp(14f), dp(14f))
+                // 右缘：左圆右方；左缘：右圆左方
+                cornerRadii = if (left) {
+                    floatArrayOf(0f, 0f, dp(14f), dp(14f), dp(14f), dp(14f), 0f, 0f)
+                } else {
+                    floatArrayOf(dp(14f), dp(14f), 0f, 0f, 0f, 0f, dp(14f), dp(14f))
+                }
                 setColor(0xF06C4AB6.toInt())
             }
         }
@@ -77,7 +83,7 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT,
         ).apply {
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            gravity = (if (left) Gravity.START else Gravity.END) or Gravity.CENTER_VERTICAL
             x = dp(2f).toInt() // 略往里挪，避开最边缘的返回手势区
             y = FlashCapsuleApp.from(this@OverlayService).settings.handleY // 恢复上次位置
         }

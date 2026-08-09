@@ -52,6 +52,13 @@ class MainActivity : ComponentActivity() {
                         )
                     },
                     overlayOn = overlayOn,
+                    onHandleSideChanged = {
+                        // 切换把手左右侧后重启悬浮窗才能生效
+                        if (overlayOn && android.provider.Settings.canDrawOverlays(context)) {
+                            OverlayService.stop(context)
+                            OverlayService.start(context)
+                        }
+                    },
                     onToggleOverlay = {
                         if (overlayOn) {
                             OverlayService.stop(context)

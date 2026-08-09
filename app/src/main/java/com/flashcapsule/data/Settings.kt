@@ -36,6 +36,11 @@ class Settings(context: Context) {
         get() = prefs.getInt(KEY_HANDLE_Y, 0)
         set(value) { prefs.edit().putInt(KEY_HANDLE_Y, value).apply() }
 
+    /** 把手放哪侧：true=左手（屏幕左缘），false=右手（屏幕右缘）。 */
+    var handleLeft: Boolean
+        get() = prefs.getBoolean(KEY_HANDLE_LEFT, false)
+        set(value) { prefs.edit().putBoolean(KEY_HANDLE_LEFT, value).apply() }
+
     /** DeepSeek API Key（用户自己填，不硬编码进 APK）。空 = 不启用 AI 标题/分类。 */
     var apiKey: String
         get() = prefs.getString(KEY_API_KEY, "") ?: ""
@@ -60,6 +65,7 @@ class Settings(context: Context) {
         private const val KEY_LANG = "stt_language"
         private const val KEY_OVERLAY = "overlay_enabled"
         private const val KEY_HANDLE_Y = "handle_y"
+        private const val KEY_HANDLE_LEFT = "handle_left"
         private const val KEY_API_KEY = "api_key"
         private const val KEY_LAST_PURGE = "last_trash_purge"
         private const val KEY_AI_ERROR = "ai_error"

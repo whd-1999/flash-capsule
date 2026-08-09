@@ -42,6 +42,9 @@ class InboxViewModel(
     private val _aiError = MutableStateFlow(settings.aiError)
     val aiError: StateFlow<String> = _aiError
 
+    private val _handleLeft = MutableStateFlow(settings.handleLeft)
+    val handleLeft: StateFlow<Boolean> = _handleLeft
+
     val capsules: StateFlow<List<Capsule>> =
         combine(query, filter) { q, f -> q to f }
             .flatMapLatest { (q, f) ->
@@ -70,6 +73,11 @@ class InboxViewModel(
     fun setApiKey(k: String) {
         settings.apiKey = k.trim()
         _apiKey.value = settings.apiKey
+    }
+
+    fun toggleHandleSide() {
+        settings.handleLeft = !settings.handleLeft
+        _handleLeft.value = settings.handleLeft
     }
 
     /** 语音直存（长按说话 / 磁贴 / 助理都走它）。 */
