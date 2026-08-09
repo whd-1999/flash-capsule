@@ -64,7 +64,12 @@ class OverlayService : Service() {
 
     private fun addHandle() {
         windowManager = getSystemService(WindowManager::class.java)
-        val left = FlashCapsuleApp.from(this@OverlayService).settings.handleLeft
+        val settings = FlashCapsuleApp.from(this@OverlayService).settings
+        val left = settings.handleLeft
+        val screenW = resources.displayMetrics.widthPixels
+        val screenH = resources.displayMetrics.heightPixels
+        val handleW = dp(26f).toInt()
+        val handleH = dp(112f).toInt()
         val view = View(this).apply {
             background = GradientDrawable().apply {
                 // 右缘：左圆右方；左缘：右圆左方
@@ -77,17 +82,17 @@ class OverlayService : Service() {
             }
         }
         val lp = WindowManager.LayoutParams(
-            dp(26f).toInt(),
-            dp(112f).toInt(),
+            handleW, handleH,
             overlayType(),
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT,
         ).apply {
-            gravity = (if (left) Gravity.START else Gravity.END) or Gravity.CENTER_VERTICAL
-            x = dp(2f).toInt() // 略往里挪，避开最边缘的返回手势区
-            y = FlashCapsuleApp.from(this@OverlayService).settings.handleY // 恢复上次位置
+            // 用绝对坐标定位（TOP|START），支持水平实时跟随
+            gravity = Gravity.TOP or Gravity.START
+            x = if (left) dp(2f).toInt() else screenW - handleW - dp(2f).toInt()
+            y = screenH / 2 + settings.handleY // 恢复上次位置（handleY = 相对屏幕中心偏移）
         }
-        view.setOnTouchListener(dragAndTap(lp))
+        view.setOnTouchListener(dragAndTap(lp, screenW, screenH, handleW))
         windowManager.addView(view, lp)
         handle = view
         // 把把手区域排除出系统返回/侧滑手势，让触摸落到把手上
@@ -101,34 +106,53 @@ class OverlayService : Service() {
         }
     }
 
-    private fun dragAndTap(lp: WindowManager.LayoutParams): View.OnTouchListener {
-        var startRawY = 0f
+    private fun dragAndTap(
+        lp: WindowManager.LayoutParams,
+        screenW: Int,
+        screenH: Int,
+        handleW: Int,
+    ): View.OnTouchListener {
         var startRawX = 0f
+        var startRawY = 0f
+        var startX = 0
         var startY = 0
         var moved = false
         return View.OnTouchListener { view, e ->
             when (e.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    startRawY = e.rawY; startRawX = e.rawX; startY = lp.y; moved = false; true
+                    startRawX = e.rawX; startRawY = e.rawY; startX = lp.x; startY = lp.y; moved = false; true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val dy = (e.rawY - startRawY).toInt()
                     val dx = (e.rawX - startRawX).toInt()
-                    if (abs(dy) > dp(8f) || abs(dx) > dp(8f)) moved = true
-                    lp.y = startY + dy
-                    windowManager.updateViewLayout(view, lp); true
+                    val dy = (e.rawY - startRawY).toInt()
+                    if (abs(dx) > dp(8f) || abs(dy) > dp(8f)) moved = true
+                    if (moved) {
+                        // 水平/垂直都实时跟随手指
+                        lp.x = startX + dx
+                        lp.y = startY + dy
+                        windowManager.updateViewLayout(view, lp)
+                    }
+                    true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (!moved) openPanel()
-                    else {
+                    if (!moved) {
+                        openPanel()
+                    } else {
                         val settings = FlashCapsuleApp.from(this@OverlayService).settings
-                        settings.handleY = lp.y
-                        // 水平拖动：落在屏幕左半 → 吸附左缘，右半 → 右缘
-                        val half = resources.displayMetrics.widthPixels / 2
-                        val newLeft = e.rawX < half
+                        // 吸附到最近的一边
+                        val half = screenW / 2
+                        val newLeft = lp.x + handleW / 2 < half
+                        val clampedY = lp.y.coerceIn(0, screenH - lp.height)
+                        settings.handleY = clampedY - screenH / 2
                         if (newLeft != settings.handleLeft) {
+                            // 换边：重建（圆角反向 + 定位）
                             settings.handleLeft = newLeft
-                            rebuildHandle() // 换边重建（gravity + 圆角）
+                            rebuildHandle()
+                        } else {
+                            // 同侧：吸附回边缘
+                            lp.x = if (newLeft) dp(2f).toInt() else screenW - handleW - dp(2f).toInt()
+                            lp.y = clampedY
+                            windowManager.updateViewLayout(view, lp)
                         }
                     }
                     true

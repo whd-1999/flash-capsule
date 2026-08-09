@@ -43,7 +43,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -232,6 +237,8 @@ fun InboxScreen(
                                 },
                                 onClick = { editing = capsule },
                                 onToggleDone = { vm.toggleDone(capsule.id) },
+                                onDelete = { vm.delete(capsule.id) },
+                                onAutoTag = { vm.enrich(capsule.id) },
                             )
                         }
                     }
@@ -304,6 +311,7 @@ private fun CaptureFab(onTap: () -> Unit, onLongPress: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CapsuleCard(
     capsule: Capsule,
@@ -311,71 +319,112 @@ private fun CapsuleCard(
     onPlay: () -> Unit,
     onClick: () -> Unit,
     onToggleDone: () -> Unit,
+    onDelete: () -> Unit,
+    onAutoTag: () -> Unit,
 ) {
     val done = capsule.doneAt != null
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-    ) {
-        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
-            Checkbox(
-                checked = done,
-                onCheckedChange = { onToggleDone() },
-            )
-            capsule.colorTag?.let {
-                Box(
-                    Modifier
-                        .width(4.dp)
-                        .fillMaxHeight()
-                        .background(capsuleColorOf(if (done) ColorTag.GRAY else it))
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            when (value) {
+                SwipeToDismissBoxValue.EndToStart -> { onDelete(); true }   // 左滑 → 删除（进回收站）
+                SwipeToDismissBoxValue.StartToEnd -> { onAutoTag(); false } // 右滑 → AI 打标签（弹回不消失）
+                else -> false
+            }
+        },
+    )
+    SwipeToDismissBox(
+        state = dismissState,
+        backgroundContent = {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        if (dismissState.dismissDirection == SwipeToDismissBoxValue.EndToStart)
+                            Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary
+                    ),
+                contentAlignment = when (dismissState.dismissDirection) {
+                    SwipeToDismissBoxValue.EndToStart -> Alignment.CenterEnd
+                    SwipeToDismissBoxValue.StartToEnd -> Alignment.CenterStart
+                    else -> Alignment.Center
+                },
+            ) {
+                Text(
+                    text = when (dismissState.dismissDirection) {
+                        SwipeToDismissBoxValue.EndToStart -> "删除"
+                        SwipeToDismissBoxValue.StartToEnd -> "AI 打标签"
+                        else -> ""
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 20.dp),
                 )
             }
-            Column(
-                Modifier
-                    .padding(12.dp)
-                    .graphicsLayer { alpha = if (done) 0.55f else 1f }
-            ) {
-                val headline = capsule.title.ifBlank { capsule.text }
-                if (headline.isNotBlank()) {
-                    Text(
-                        text = headline,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = if (capsule.title.isNotBlank()) FontWeight.SemiBold else FontWeight.Normal,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
+        },
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onClick() }
+        ) {
+            Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+                Checkbox(
+                    checked = done,
+                    onCheckedChange = { onToggleDone() },
+                )
+                capsule.colorTag?.let {
+                    Box(
+                        Modifier
+                            .width(4.dp)
+                            .fillMaxHeight()
+                            .background(capsuleColorOf(if (done) ColorTag.GRAY else it))
                     )
-                    // 有标题且与正文不同 → 正文压成两行预览
-                    if (capsule.title.isNotBlank() && capsule.text.isNotBlank() && capsule.text != capsule.title) {
+                }
+                Column(
+                    Modifier
+                        .padding(12.dp)
+                        .graphicsLayer { alpha = if (done) 0.55f else 1f }
+                ) {
+                    val headline = capsule.title.ifBlank { capsule.text }
+                    if (headline.isNotBlank()) {
                         Text(
-                            text = capsule.text,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
+                            text = headline,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (capsule.title.isNotBlank()) FontWeight.SemiBold else FontWeight.Normal,
+                            maxLines = 4,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        // 有标题且与正文不同 → 正文压成两行预览
+                        if (capsule.title.isNotBlank() && capsule.text.isNotBlank() && capsule.text != capsule.title) {
+                            Text(
+                                text = capsule.text,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    } else {
+                        CapsuleTranscribeHint(capsule, textColor = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                } else {
-                    CapsuleTranscribeHint(capsule, textColor = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (capsule.audioPath != null) {
+                    if (capsule.audioPath != null) {
+                        Spacer(Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CapsulePlayDot(isPlaying = playing, onClick = onPlay)
+                            Spacer(Modifier.width(8.dp))
+                            CapsuleWaveform(
+                                samples = capsule.waveform,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f).height(26.dp),
+                            )
+                        }
+                    }
                     Spacer(Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CapsulePlayDot(isPlaying = playing, onClick = onPlay)
-                        Spacer(Modifier.width(8.dp))
-                        CapsuleWaveform(
-                            samples = capsule.waveform,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f).height(26.dp),
-                        )
-                    }
+                    Text(
+                        text = fmt(capsule.createdAt) + " · " + capsule.source,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = fmt(capsule.createdAt) + " · " + capsule.source,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
     }
