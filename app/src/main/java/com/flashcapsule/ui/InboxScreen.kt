@@ -29,6 +29,9 @@ import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.VerticalSplit
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.Intent
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -271,6 +274,8 @@ fun InboxScreen(
             onSaveText = { vm.updateText(cap.id, it); editing = null },
             onSaveTitle = { vm.updateTitle(cap.id, it); editing = null },
             onEnrich = { vm.enrich(cap.id) },
+            onTogglePin = { vm.togglePin(cap.id) },
+            onSetReminder = { t -> vm.setReminder(cap.id, t); scheduleReminder(context, cap, t) },
             onDelete = { vm.delete(cap.id); editing = null },
             onShare = { t -> capsuleShareText(context, t); editing = null },
             onCalendar = { t -> capsuleAddToCalendar(context, t); editing = null },
@@ -509,3 +514,20 @@ private fun LanguageDialog(current: String, onPick: (String) -> Unit, onDismiss:
 
 private fun fmt(t: Long): String =
     SimpleDateFormat("MM-dd HH:mm", Locale.US).format(Date(t))
+
+/** 调度一次性提醒（AlarmManager → ReminderReceiver）。time=null 取消。 */
+private fun scheduleReminder(context: android.content.Context, capsule: Capsule, time: Long?) {
+    val am = context.getSystemService(AlarmManager::class.java)
+    val intent = Intent(context, com.flashcapsule.capture.ReminderReceiver::class.java)
+        .putExtra(com.flashcapsule.capture.ReminderReceiver.EXTRA_ID, capsule.id)
+        .putExtra(com.flashcapsule.capture.ReminderReceiver.EXTRA_TITLE, capsule.title.ifBlank { capsule.text }.take(40))
+    val pi = PendingIntent.getBroadcast(
+        context, capsule.id.hashCode(), intent,
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+    if (time == null) {
+        am.cancel(pi)
+    } else {
+        am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, time, pi)
+    }
+}

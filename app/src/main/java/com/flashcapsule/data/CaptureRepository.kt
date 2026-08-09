@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.util.Collections
 import java.util.UUID
@@ -39,6 +40,9 @@ class CaptureRepository(
 
     fun observeTrash(): Flow<List<Capsule>> =
         dao.observeTrash().map { list -> list.map(CapsuleEntity::toModel) }
+
+    /** 按 id 同步查（提醒 receiver 用）。 */
+    fun searchById(id: String): Capsule? = runBlocking { dao.byId(id)?.toModel() }
 
     /** 零决策捕获入口：任何来源产出 RawCapture 后调用它即可。 */
     suspend fun ingest(raw: RawCapture): Capsule {
@@ -121,6 +125,18 @@ class CaptureRepository(
         val now = System.currentTimeMillis()
         val e = dao.byId(id) ?: return
         dao.setDone(id, if (e.doneAt == null) now else null, now)
+    }
+
+    /** 置顶/取消置顶。 */
+    suspend fun togglePin(id: String) {
+        val e = dao.byId(id) ?: return
+        dao.upsert(e.copy(pinned = !e.pinned, updatedAt = System.currentTimeMillis()))
+    }
+
+    /** 设置提醒时间；null = 取消提醒。 */
+    suspend fun setReminder(id: String, time: Long?) {
+        val e = dao.byId(id) ?: return
+        dao.upsert(e.copy(reminderAt = time, updatedAt = System.currentTimeMillis()))
     }
 
     suspend fun exportTo(sinkId: String, id: String): Result<Unit> {

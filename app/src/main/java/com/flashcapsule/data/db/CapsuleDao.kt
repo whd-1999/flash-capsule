@@ -18,6 +18,10 @@ interface CapsuleDao {
     @Query("SELECT * FROM capsules WHERE deletedAt IS NULL AND text != '' AND (title IS NULL OR title = '') ORDER BY createdAt DESC")
     suspend fun untitled(): List<CapsuleEntity>
 
+    /** 按时间增量查（ContentProvider 用）：createdAt >= since 的活动胶囊。 */
+    @Query("SELECT * FROM capsules WHERE deletedAt IS NULL AND createdAt >= :since ORDER BY createdAt ASC")
+    suspend fun since(since: Long): List<CapsuleEntity>
+
     /** 回收站：只显示软删的。 */
     @Query("SELECT * FROM capsules WHERE deletedAt IS NOT NULL ORDER BY deletedAt DESC")
     fun observeTrash(): Flow<List<CapsuleEntity>>

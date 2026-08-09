@@ -93,6 +93,8 @@ class InboxViewModel(
     fun updateText(id: String, text: String) = viewModelScope.launch { repo.updateText(id, text) }
     fun updateTitle(id: String, title: String) = viewModelScope.launch { repo.updateTitle(id, title) }
     fun enrich(id: String) = viewModelScope.launch { repo.enrich(id, force = true) }
+    fun togglePin(id: String) = viewModelScope.launch { repo.togglePin(id) }
+    fun setReminder(id: String, time: Long?) = viewModelScope.launch { repo.setReminder(id, time) }
     fun export(sinkId: String, id: String) = viewModelScope.launch { repo.exportTo(sinkId, id) }
 
     class Factory(

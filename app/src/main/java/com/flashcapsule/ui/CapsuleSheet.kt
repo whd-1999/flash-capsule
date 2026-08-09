@@ -36,7 +36,11 @@ import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PriorityHigh
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.AlarmOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -328,6 +332,8 @@ fun CapsuleSheet(
     onSaveText: (String) -> Unit,
     onSaveTitle: (String) -> Unit,
     onEnrich: (() -> Unit)? = null,
+    onTogglePin: () -> Unit,
+    onSetReminder: (Long?) -> Unit,
     onDelete: () -> Unit,
     onShare: (String) -> Unit,
     onCalendar: (String) -> Unit,
@@ -338,6 +344,7 @@ fun CapsuleSheet(
     var text by remember(capsule.id) { mutableStateOf(capsule.text) }
     var title by remember(capsule.id) { mutableStateOf(capsule.title) }
     var color by remember(capsule.id) { mutableStateOf(capsule.colorTag) }
+    var showReminderPicker by remember(capsule.id) { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -427,6 +434,20 @@ fun CapsuleSheet(
                             Icon(Icons.Filled.AutoAwesome, contentDescription = "AI 重新生成标题/分类")
                         }
                     }
+                    IconButton(onClick = onTogglePin) {
+                        Icon(
+                            Icons.Filled.PushPin,
+                            contentDescription = "置顶",
+                            tint = if (capsule.pinned) MaterialTheme.colorScheme.primary else SheetSub,
+                        )
+                    }
+                    IconButton(onClick = { showReminderPicker = true }) {
+                        Icon(
+                            if (capsule.reminderAt != null) Icons.Filled.Alarm else Icons.Filled.AlarmOff,
+                            contentDescription = "提醒",
+                            tint = if (capsule.reminderAt != null) MaterialTheme.colorScheme.primary else SheetSub,
+                        )
+                    }
                     IconButton(onClick = { onShare(text) }) { Icon(Icons.Filled.Share, "分享") }
                     IconButton(onClick = onObsidian) { Icon(Icons.Filled.Description, "落 Obsidian") }
                     IconButton(onClick = { onCalendar(text) }) { Icon(Icons.Filled.Event, "转日历") }
@@ -446,6 +467,60 @@ fun CapsuleSheet(
             }
         }
     }
+
+    if (showReminderPicker) {
+        ReminderPickerDialog(
+            onPick = { onSetReminder(it); showReminderPicker = false },
+            onCancel = { onSetReminder(null); showReminderPicker = false },
+            onDismiss = { showReminderPicker = false },
+        )
+    }
+}
+
+/** 提醒时间选择：预设 30 分钟/1小时/3小时/明天 9 点/取消。 */
+@Composable
+private fun ReminderPickerDialog(
+    onPick: (Long) -> Unit,
+    onCancel: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val now = remember { System.currentTimeMillis() }
+    val options = listOf(
+        "30 分钟后" to (now + 30 * 60_000L),
+        "1 小时后" to (now + 60 * 60_000L),
+        "3 小时后" to (now + 3 * 60 * 60_000L),
+        "明天 9:00" to tomorrow9(),
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("提醒我") },
+        text = {
+            Column {
+                options.forEach { (label, time) ->
+                    TextButton(
+                        onClick = { onPick(time) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(label, modifier = Modifier.fillMaxWidth()) }
+                }
+                TextButton(
+                    onClick = onCancel,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("取消提醒", modifier = Modifier.fillMaxWidth(), color = SheetDelete) }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
+    )
+}
+
+private fun tomorrow9(): Long {
+    val cal = java.util.Calendar.getInstance()
+    cal.add(java.util.Calendar.DAY_OF_YEAR, 1)
+    cal.set(java.util.Calendar.HOUR_OF_DAY, 9)
+    cal.set(java.util.Calendar.MINUTE, 0)
+    cal.set(java.util.Calendar.SECOND, 0)
+    cal.set(java.util.Calendar.MILLISECOND, 0)
+    return cal.timeInMillis
 }
 
 @Composable

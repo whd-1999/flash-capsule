@@ -83,6 +83,17 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".capture.ReminderReceiver"
+            android:exported="false" />
+
+        <!-- 只读内容提供者：外部脚本按 since 拉取胶囊（content://com.flashcapsule.provider/capsules） -->
+        <provider
+            android:name=".data.CapsuleContentProvider"
+            android:authorities="com.flashcapsule.provider"
+            android:exported="true"
+            android:readPermission="com.flashcapsule.permission.READ_CAPSULES" />
+
         <!-- 数字助理：设为默认助理后，长按电源/侧边键的助理手势即唤起语音捕获 -->
         <service
             android:name=".assist.CaptureVoiceInteractionService"

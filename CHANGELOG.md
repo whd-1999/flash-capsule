@@ -5,7 +5,18 @@
 
 ## [Unreleased]
 ### Planned
-- ContentProvider 读接口（供自动化脚本拉取）
+- 语义搜索（embedding）
+- 同步（SyncProvider）
+
+## [0.16.0] - 2026-08-09
+### Added
+- **ContentProvider 读接口**：`content://com.flashcapsule.provider/capsules?since=<epoch>`
+  返回 JSON，供自动化脚本/外部拉取
+- **置顶胶囊**：展开面板图钉按钮，置顶排最前（pinned 已有字段补上 UI）
+- **待办提醒**：展开面板闹钟按钮 → 30分钟/1小时/3小时/明天9点，到点系统通知提醒
+- **把手水平拖动吸附**：把手可水平拖，拖到屏幕左半自动吸附左缘（右手→左手），反之亦然
+### Changed
+- versionCode/versionName → 19 / 0.16.0
 
 ## [0.15.0] - 2026-08-09
 ### Added

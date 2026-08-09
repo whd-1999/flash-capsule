@@ -103,27 +103,45 @@ class OverlayService : Service() {
 
     private fun dragAndTap(lp: WindowManager.LayoutParams): View.OnTouchListener {
         var startRawY = 0f
+        var startRawX = 0f
         var startY = 0
         var moved = false
         return View.OnTouchListener { view, e ->
             when (e.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    startRawY = e.rawY; startY = lp.y; moved = false; true
+                    startRawY = e.rawY; startRawX = e.rawX; startY = lp.y; moved = false; true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dy = (e.rawY - startRawY).toInt()
-                    if (abs(dy) > dp(8f)) moved = true
+                    val dx = (e.rawX - startRawX).toInt()
+                    if (abs(dy) > dp(8f) || abs(dx) > dp(8f)) moved = true
                     lp.y = startY + dy
                     windowManager.updateViewLayout(view, lp); true
                 }
                 MotionEvent.ACTION_UP -> {
                     if (!moved) openPanel()
-                    else FlashCapsuleApp.from(this@OverlayService).settings.handleY = lp.y
+                    else {
+                        val settings = FlashCapsuleApp.from(this@OverlayService).settings
+                        settings.handleY = lp.y
+                        // 水平拖动：落在屏幕左半 → 吸附左缘，右半 → 右缘
+                        val half = resources.displayMetrics.widthPixels / 2
+                        val newLeft = e.rawX < half
+                        if (newLeft != settings.handleLeft) {
+                            settings.handleLeft = newLeft
+                            rebuildHandle() // 换边重建（gravity + 圆角）
+                        }
+                    }
                     true
                 }
                 else -> false
             }
         }
+    }
+
+    private fun rebuildHandle() {
+        handle?.let { runCatching { windowManager.removeView(it) } }
+        handle = null
+        addHandle()
     }
 
     private fun openPanel() {
