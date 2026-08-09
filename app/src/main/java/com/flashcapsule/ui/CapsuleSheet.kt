@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
@@ -262,7 +263,7 @@ fun CapsuleTranscribeHint(capsule: Capsule, textColor: Color = SheetSub) {
     )
 }
 
-/** 展开的胶囊：顶部 5 分类色标 + 文字/波形/播放 + 底部操作栏。主 App 与侧边面板共用。 */
+/** 展开的胶囊：顶部 5 分类色标 + 标题/文字/波形/播放 + 底部操作栏。主 App 与侧边面板共用。 */
 @Composable
 fun CapsuleSheet(
     capsule: Capsule,
@@ -270,6 +271,8 @@ fun CapsuleSheet(
     onPlay: () -> Unit,
     onSetColor: (ColorTag) -> Unit,
     onSaveText: (String) -> Unit,
+    onSaveTitle: (String) -> Unit,
+    onEnrich: (() -> Unit)? = null,
     onDelete: () -> Unit,
     onShare: (String) -> Unit,
     onCalendar: (String) -> Unit,
@@ -277,8 +280,9 @@ fun CapsuleSheet(
     onDismiss: () -> Unit,
 ) {
     val noRipple = remember { MutableInteractionSource() }
-    var text by remember { mutableStateOf(capsule.text) }
-    var color by remember { mutableStateOf(capsule.colorTag) }
+    var text by remember(capsule.id) { mutableStateOf(capsule.text) }
+    var title by remember(capsule.id) { mutableStateOf(capsule.title) }
+    var color by remember(capsule.id) { mutableStateOf(capsule.colorTag) }
 
     Box(
         modifier = Modifier
@@ -309,6 +313,22 @@ fun CapsuleSheet(
                 }
                 Spacer(Modifier.height(14.dp))
                 OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("自动标题（AI 生成，可改）", color = SheetSub) },
+                    textStyle = TextStyle(color = SheetText),
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = SheetText,
+                        unfocusedTextColor = SheetText,
+                        cursorColor = SheetText,
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                    ),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
                     modifier = Modifier.fillMaxWidth(),
@@ -334,8 +354,28 @@ fun CapsuleSheet(
                         )
                     }
                 }
+                if (capsule.tags.isNotEmpty()) {
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        capsule.tags.forEach { tag ->
+                            Text(
+                                text = "#$tag",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = SheetSub,
+                                modifier = Modifier
+                                    .background(Color(0x14000000), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.height(14.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (onEnrich != null) {
+                        IconButton(onClick = { onEnrich() }) {
+                            Icon(Icons.Filled.AutoAwesome, contentDescription = "AI 重新生成标题/分类")
+                        }
+                    }
                     IconButton(onClick = { onShare(text) }) { Icon(Icons.Filled.Share, "分享") }
                     IconButton(onClick = onObsidian) { Icon(Icons.Filled.Description, "落 Obsidian") }
                     IconButton(onClick = { onCalendar(text) }) { Icon(Icons.Filled.Event, "转日历") }
@@ -350,7 +390,7 @@ fun CapsuleSheet(
                 ) {
                     TextButton(onClick = onDismiss) { Text("取消", color = SheetSub) }
                     Spacer(Modifier.width(4.dp))
-                    Button(onClick = { onSaveText(text) }) { Text("保存") }
+                    Button(onClick = { onSaveText(text); onSaveTitle(title) }) { Text("保存") }
                 }
             }
         }

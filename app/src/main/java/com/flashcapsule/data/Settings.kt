@@ -36,9 +36,21 @@ class Settings(context: Context) {
         get() = prefs.getInt(KEY_HANDLE_Y, 0)
         set(value) { prefs.edit().putInt(KEY_HANDLE_Y, value).apply() }
 
+    /** DeepSeek API Key（用户自己填，不硬编码进 APK）。空 = 不启用 AI 标题/分类。 */
+    var apiKey: String
+        get() = prefs.getString(KEY_API_KEY, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_API_KEY, value).apply() }
+
+    /** 上次回收站清理时间戳，用于每日节流。 */
+    var lastTrashPurgeAt: Long
+        get() = prefs.getLong(KEY_LAST_PURGE, 0L)
+        set(value) { prefs.edit().putLong(KEY_LAST_PURGE, value).apply() }
+
     companion object {
         private const val KEY_LANG = "stt_language"
         private const val KEY_OVERLAY = "overlay_enabled"
         private const val KEY_HANDLE_Y = "handle_y"
+        private const val KEY_API_KEY = "api_key"
+        private const val KEY_LAST_PURGE = "last_trash_purge"
     }
 }

@@ -3,6 +3,7 @@ package com.flashcapsule
 import android.app.Application
 import android.content.Context
 import androidx.room.Room
+import com.flashcapsule.ai.DeepSeekEnricher
 import com.flashcapsule.data.CaptureRepository
 import com.flashcapsule.data.Settings
 import com.flashcapsule.data.db.AppDatabase
@@ -13,6 +14,7 @@ import com.flashcapsule.transcribe.WhisperTranscriber
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /** 轻量手动 DI（ServiceLocator）。不引 Koin/Hilt，保持简洁。 */
 class FlashCapsuleApp : Application() {
@@ -27,7 +29,7 @@ class FlashCapsuleApp : Application() {
         super.onCreate()
         settings = Settings(this)
         val db = Room.databaseBuilder(this, AppDatabase::class.java, "flashcapsule.db")
-            .fallbackToDestructiveMigration()
+            .addMigrations(AppDatabase.MIGRATION_2_3)
             .build()
         val sinks = SinkRegistry(
             listOf(
@@ -35,13 +37,17 @@ class FlashCapsuleApp : Application() {
                 ShareSink(this),
             )
         )
+        val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         repository = CaptureRepository(
             dao = db.capsuleDao(),
             sinks = sinks,
             transcriber = WhisperTranscriber(this),
             settings = settings,
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+            scope = appScope,
+            enricher = DeepSeekEnricher(settings),
         )
+        // 回收站 30 天惰性清理（启动时跑，每日最多一次）
+        appScope.launch { repository.purgeExpiredTrash() }
     }
 
     companion object {

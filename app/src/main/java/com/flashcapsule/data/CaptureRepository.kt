@@ -1,5 +1,6 @@
 package com.flashcapsule.data
 
+import com.flashcapsule.ai.CapsuleEnricher
 import com.flashcapsule.data.db.CapsuleDao
 import com.flashcapsule.data.db.CapsuleEntity
 import com.flashcapsule.data.db.toEntity
@@ -14,6 +15,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import java.io.File
+import java.util.Collections
 import java.util.UUID
 
 /**
@@ -26,12 +29,16 @@ class CaptureRepository(
     private val transcriber: Transcriber,
     private val settings: Settings,
     private val scope: CoroutineScope,
+    private val enricher: CapsuleEnricher? = null,
 ) {
     fun observeAll(): Flow<List<Capsule>> =
         dao.observeAll().map { list -> list.map(CapsuleEntity::toModel) }
 
     fun search(q: String): Flow<List<Capsule>> =
         dao.search(q).map { list -> list.map(CapsuleEntity::toModel) }
+
+    fun observeTrash(): Flow<List<Capsule>> =
+        dao.observeTrash().map { list -> list.map(CapsuleEntity::toModel) }
 
     /** 零决策捕获入口：任何来源产出 RawCapture 后调用它即可。 */
     suspend fun ingest(raw: RawCapture): Capsule {
@@ -54,6 +61,9 @@ class CaptureRepository(
         // 语音胶囊（有音频、无文字）→ 后台用 Whisper 转写填字
         if (raw.text.isNullOrBlank() && raw.audioPath != null) {
             scope.launch { transcribeInto(capsule.id, raw.audioPath) }
+        } else if (capsule.text.isNotBlank()) {
+            // 文字捕获 → 直接尝试 AI 标题/分类
+            scope.launch { enrich(capsule.id) }
         }
         return capsule
     }
@@ -70,6 +80,8 @@ class CaptureRepository(
                     updatedAt = System.currentTimeMillis(),
                 )
             )
+            // 转写成功 → AI 标题/分类
+            enrich(id)
         }
     }
 
@@ -83,10 +95,85 @@ class CaptureRepository(
         dao.upsert(e.copy(text = text, updatedAt = System.currentTimeMillis()))
     }
 
-    suspend fun delete(id: String) = dao.delete(id)
+    suspend fun updateTitle(id: String, title: String) {
+        val e = dao.byId(id) ?: return
+        dao.upsert(e.copy(title = title, updatedAt = System.currentTimeMillis()))
+    }
+
+    /** 软删除：进回收站。音频文件保留（恢复后仍可用）。 */
+    suspend fun delete(id: String) {
+        dao.softDelete(id, System.currentTimeMillis())
+    }
+
+    /** 恢复。doneAt 原样保留（删前已勾完成的，恢复后仍算完成）。 */
+    suspend fun restore(id: String) {
+        dao.restore(id, System.currentTimeMillis())
+    }
+
+    /** 彻底删：物理 DELETE + 顺带清掉音频文件。 */
+    suspend fun permanentDelete(id: String) {
+        dao.byId(id)?.audioPath?.let { p -> runCatching { File(p).delete() } }
+        dao.permanentDelete(id)
+    }
+
+    /** 勾/取消勾完成。 */
+    suspend fun toggleDone(id: String) {
+        val now = System.currentTimeMillis()
+        val e = dao.byId(id) ?: return
+        dao.setDone(id, if (e.doneAt == null) now else null, now)
+    }
 
     suspend fun exportTo(sinkId: String, id: String): Result<Unit> {
         val e = dao.byId(id) ?: return Result.failure(IllegalStateException("capsule not found"))
         return sinks.dispatch(sinkId, e.toModel())
+    }
+
+    /**
+     * AI 标题/分类：一次调用生成 title + colorTag + tags。
+     * 三层去重防重复计费：① DB 里 title 非空即跳过（幂等标记）② 未配 key 跳过 ③ 进程内并发集合防双击。
+     */
+    private val enriching = Collections.synchronizedSet(mutableSetOf<String>())
+
+    suspend fun enrich(id: String, force: Boolean = false) {
+        val e = dao.byId(id) ?: return
+        if (!force && e.title.isNullOrBlank().not()) return      // ① 已有标题 = 已处理过
+        if (settings.apiKey.isBlank()) return                     // ② 未配 key
+        val enricher = enricher ?: return
+        if (!enriching.add(id)) return                            // ③ 进程内并发去重
+        try {
+            val text = e.text.trim().take(ENRICH_MAX_CHARS)
+            if (text.isBlank()) return
+            val result = enricher.enrich(text) ?: return          // 失败 → 静默降级
+            val cur = dao.byId(id) ?: return
+            if (!force && cur.title.isNullOrBlank().not()) return // 双检：期间被手动改过则不动
+            dao.upsert(
+                cur.copy(
+                    title = result.title,
+                    colorTag = result.colorTag?.name ?: cur.colorTag,
+                    tags = if (result.tags.isNotEmpty()) result.tags.joinToString(",") else cur.tags,
+                    updatedAt = System.currentTimeMillis(),
+                )
+            )
+        } finally {
+            enriching.remove(id)
+        }
+    }
+
+    /** 回收站 30 天清理：App 启动时惰性调用，每日最多一次（不引后台任务）。 */
+    suspend fun purgeExpiredTrash(force: Boolean = false) {
+        val last = settings.lastTrashPurgeAt
+        if (!force && last > 0 && System.currentTimeMillis() - last < PURGE_INTERVAL_MS) return
+        val cutoff = System.currentTimeMillis() - TRASH_TTL_MS
+        dao.trashedBefore(cutoff).forEach { e ->
+            e.audioPath?.let { p -> runCatching { File(p).delete() } }
+        }
+        dao.purgeTrashBefore(cutoff)
+        settings.lastTrashPurgeAt = System.currentTimeMillis()
+    }
+
+    companion object {
+        private const val TRASH_TTL_MS = 30L * 24 * 3600 * 1000   // 30 天
+        private const val PURGE_INTERVAL_MS = 24L * 3600 * 1000   // 每天最多跑一次
+        private const val ENRICH_MAX_CHARS = 2000
     }
 }

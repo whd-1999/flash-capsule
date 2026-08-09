@@ -368,6 +368,8 @@ private fun PanelContent(repo: CaptureRepository, onDismiss: () -> Unit) {
                 onPlay = { cap.audioPath?.let { p -> AudioPlayer.toggle(p) { playing = AudioPlayer.currentPath } } },
                 onSetColor = { tag -> scope.launch { repo.setColor(cap.id, tag) } },
                 onSaveText = { t -> scope.launch { repo.updateText(cap.id, t) }; editing = null },
+                onSaveTitle = { t -> scope.launch { repo.updateTitle(cap.id, t) } },
+                onEnrich = { scope.launch { repo.enrich(cap.id, force = true) } },
                 onDelete = { scope.launch { repo.delete(cap.id) }; editing = null },
                 onShare = { t -> capsuleShareText(context, t); editing = null },
                 onCalendar = { t -> capsuleAddToCalendar(context, t); editing = null },

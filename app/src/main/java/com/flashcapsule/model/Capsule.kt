@@ -19,4 +19,10 @@ data class Capsule(
     val pinned: Boolean = false,
     /** 录音波形振幅采样（0..32767），用于绘制胶囊里的波形。 */
     val waveform: List<Int> = emptyList(),
+    /** AI 摘要标题；空 = 未生成（列表回退显示正文）。 */
+    val title: String = "",
+    /** 软删除时间；null = 未删（回收站）。 */
+    val deletedAt: Long? = null,
+    /** 已完成时间；null = 未完成（勾选完成时记录）。 */
+    val doneAt: Long? = null,
 )

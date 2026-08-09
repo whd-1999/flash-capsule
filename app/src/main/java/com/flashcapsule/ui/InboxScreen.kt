@@ -22,12 +22,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.VerticalSplit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,12 +52,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.flashcapsule.capture.AudioPlayer
 import com.flashcapsule.data.Languages
 import com.flashcapsule.model.Capsule
+import com.flashcapsule.model.ColorTag
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -73,15 +83,34 @@ fun InboxScreen(
     val capsules by vm.capsules.collectAsState()
     val query by vm.search.collectAsState()
     val lang by vm.lang.collectAsState()
+    val apiKey by vm.apiKey.collectAsState()
+    val filter by vm.filterState.collectAsState()
+    val trash by vm.trash.collectAsState()
     var showLangDialog by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var showingTrash by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Capsule?>(null) }
     var playing by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (versionName != null) "闪念胶囊 v$versionName" else "闪念胶囊") },
+                title = {
+                    Text(
+                        if (showingTrash) "回收站"
+                        else if (versionName != null) "闪念胶囊 v$versionName"
+                        else "闪念胶囊"
+                    )
+                },
                 actions = {
+                    IconButton(onClick = { showingTrash = !showingTrash }) {
+                        Icon(
+                            Icons.Filled.DeleteSweep,
+                            contentDescription = "回收站",
+                            tint = if (showingTrash) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     IconButton(onClick = onToggleOverlay) {
                         Icon(
                             Icons.Filled.VerticalSplit,
@@ -93,18 +122,23 @@ fun InboxScreen(
                     IconButton(onClick = { showLangDialog = true }) {
                         Icon(Icons.Filled.Translate, contentDescription = "语音语言")
                     }
+                    IconButton(onClick = { showSettings = true }) {
+                        Icon(Icons.Filled.Settings, contentDescription = "设置")
+                    }
                 },
             )
         },
         floatingActionButton = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    "点·打字   长按·说话",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 8.dp),
-                )
-                CaptureFab(onTap = onCapture, onLongPress = onVoiceCapture)
+            if (!showingTrash) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "点·打字   长按·说话",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                    CaptureFab(onTap = onCapture, onLongPress = onVoiceCapture)
+                }
             }
         },
     ) { padding ->
@@ -113,40 +147,86 @@ fun InboxScreen(
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = vm::setQuery,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("搜索…") },
-                singleLine = true,
-            )
-            if (capsules.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        "还没有胶囊\n右下角：点打字 · 长按说话",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            if (showingTrash) {
+                Text(
+                    "回收站 · 保留 30 天自动清理",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                if (trash.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            "回收站是空的",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(trash, key = { it.id }) { cap ->
+                            TrashCard(
+                                capsule = cap,
+                                onRestore = { vm.restore(cap.id) },
+                                onPurge = { vm.permanentDelete(cap.id) },
+                            )
+                        }
+                    }
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = vm::setQuery,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    placeholder = { Text("搜索…") },
+                    singleLine = true,
+                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(capsules, key = { it.id }) { capsule ->
-                        CapsuleCard(
-                            capsule = capsule,
-                            playing = playing == capsule.audioPath,
-                            onPlay = {
-                                capsule.audioPath?.let { p ->
-                                    AudioPlayer.toggle(p) { playing = AudioPlayer.currentPath }
-                                }
-                            },
-                            onClick = { editing = capsule },
+                    InboxFilter.entries.forEach { f ->
+                        FilterChip(
+                            selected = filter == f,
+                            onClick = { vm.setFilter(f) },
+                            label = { Text(f.label) },
                         )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                if (capsules.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            "还没有胶囊\n右下角：点打字 · 长按说话",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(capsules, key = { it.id }) { capsule ->
+                            CapsuleCard(
+                                capsule = capsule,
+                                playing = playing == capsule.audioPath,
+                                onPlay = {
+                                    capsule.audioPath?.let { p ->
+                                        AudioPlayer.toggle(p) { playing = AudioPlayer.currentPath }
+                                    }
+                                },
+                                onClick = { editing = capsule },
+                                onToggleDone = { vm.toggleDone(capsule.id) },
+                            )
+                        }
                     }
                 }
             }
@@ -161,6 +241,14 @@ fun InboxScreen(
         )
     }
 
+    if (showSettings) {
+        SettingsDialog(
+            apiKey = apiKey,
+            onSave = { vm.setApiKey(it); showSettings = false },
+            onDismiss = { showSettings = false },
+        )
+    }
+
     editing?.let { cap ->
         CapsuleSheet(
             capsule = cap,
@@ -170,6 +258,8 @@ fun InboxScreen(
             },
             onSetColor = { vm.setColor(cap.id, it) },
             onSaveText = { vm.updateText(cap.id, it); editing = null },
+            onSaveTitle = { vm.updateTitle(cap.id, it); editing = null },
+            onEnrich = { vm.enrich(cap.id) },
             onDelete = { vm.delete(cap.id); editing = null },
             onShare = { t -> capsuleShareText(context, t); editing = null },
             onCalendar = { t -> capsuleAddToCalendar(context, t); editing = null },
@@ -204,29 +294,51 @@ private fun CapsuleCard(
     playing: Boolean,
     onPlay: () -> Unit,
     onClick: () -> Unit,
+    onToggleDone: () -> Unit,
 ) {
+    val done = capsule.doneAt != null
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
     ) {
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+            Checkbox(
+                checked = done,
+                onCheckedChange = { onToggleDone() },
+            )
             capsule.colorTag?.let {
                 Box(
                     Modifier
                         .width(4.dp)
                         .fillMaxHeight()
-                        .background(capsuleColorOf(it))
+                        .background(capsuleColorOf(if (done) ColorTag.GRAY else it))
                 )
             }
-            Column(Modifier.padding(12.dp)) {
-                if (capsule.text.isNotBlank()) {
+            Column(
+                Modifier
+                    .padding(12.dp)
+                    .graphicsLayer { alpha = if (done) 0.55f else 1f }
+            ) {
+                val headline = capsule.title.ifBlank { capsule.text }
+                if (headline.isNotBlank()) {
                     Text(
-                        text = capsule.text,
+                        text = headline,
                         style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = if (capsule.title.isNotBlank()) FontWeight.SemiBold else FontWeight.Normal,
                         maxLines = 4,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    // 有标题且与正文不同 → 正文压成两行预览
+                    if (capsule.title.isNotBlank() && capsule.text.isNotBlank() && capsule.text != capsule.title) {
+                        Text(
+                            text = capsule.text,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 } else {
                     CapsuleTranscribeHint(capsule, textColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -251,6 +363,74 @@ private fun CapsuleCard(
             }
         }
     }
+}
+
+@Composable
+private fun TrashCard(
+    capsule: Capsule,
+    onRestore: () -> Unit,
+    onPurge: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                val headline = capsule.title.ifBlank { capsule.text }
+                Text(
+                    text = if (headline.isNotBlank()) headline else "（空）",
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = fmt(capsule.createdAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = onRestore) {
+                Icon(Icons.Filled.Restore, contentDescription = "恢复", tint = MaterialTheme.colorScheme.primary)
+            }
+            IconButton(onClick = onPurge) {
+                Icon(Icons.Filled.DeleteForever, contentDescription = "彻底删除", tint = Color(0xFFD32F2F))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsDialog(apiKey: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var key by remember { mutableStateOf(apiKey) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("设置") },
+        text = {
+            Column {
+                Text(
+                    "DeepSeek API Key（可选）：配置后，捕获/转写完成自动生成标题与分类。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = key,
+                    onValueChange = { key = it },
+                    placeholder = { Text("sk-...") },
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(key.trim()) }) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
 }
 
 @Composable

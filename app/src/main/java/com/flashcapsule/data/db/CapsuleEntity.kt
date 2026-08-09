@@ -20,6 +20,9 @@ data class CapsuleEntity(
     val reminderAt: Long?,
     val pinned: Boolean,
     val waveform: String = "",
+    val title: String? = null,
+    val deletedAt: Long? = null,
+    val doneAt: Long? = null,
 )
 
 fun CapsuleEntity.toModel(): Capsule = Capsule(
@@ -36,6 +39,9 @@ fun CapsuleEntity.toModel(): Capsule = Capsule(
     pinned = pinned,
     waveform = if (waveform.isBlank()) emptyList()
     else waveform.split(",").mapNotNull { it.toIntOrNull() },
+    title = title ?: "",
+    deletedAt = deletedAt,
+    doneAt = doneAt,
 )
 
 fun Capsule.toEntity(): CapsuleEntity = CapsuleEntity(
@@ -51,4 +57,7 @@ fun Capsule.toEntity(): CapsuleEntity = CapsuleEntity(
     reminderAt = reminderAt,
     pinned = pinned,
     waveform = waveform.joinToString(","),
+    title = title,
+    deletedAt = deletedAt,
+    doneAt = doneAt,
 )

@@ -168,12 +168,15 @@ interface Transcriber {
 
 ### 5.4 AI 增强（可选，接口隔离，可整块砍掉）
 
+> 实现（v0.13.0）：`DeepSeekEnricher`（云端 API，用户自填 key），一次调用出标题+分类+标签；
+> `embed()` 留到 v3 语义搜索。
+
 ```kotlin
 interface CapsuleEnricher {
-    suspend fun titleFor(text: String): String
-    suspend fun classify(text: String): Pair<ColorTag?, List<String>>  // 自动上色 + 打标签
-    suspend fun embed(text: String): FloatArray                        // 语义搜索用
+    suspend fun enrich(text: String): Enrichment?   // 一次调用：标题 + 分类 + 标签；失败返回 null
+    suspend fun embed(text: String): FloatArray     // 语义搜索用（v3）
 }
+data class Enrichment(val title: String, val colorTag: ColorTag?, val tags: List<String>)
 ```
 
 ### 5.5 同步（可选）
