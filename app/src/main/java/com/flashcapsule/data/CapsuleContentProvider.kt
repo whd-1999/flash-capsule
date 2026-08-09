@@ -60,7 +60,7 @@ class CapsuleContentProvider : ContentProvider() {
         db?.let { return it }
         val ctx = context ?: return null
         val built = Room.databaseBuilder(ctx, AppDatabase::class.java, "flashcapsule.db")
-            .addMigrations(AppDatabase.MIGRATION_2_3)
+            .addMigrations(AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5)
             .build()
         db = built
         return built

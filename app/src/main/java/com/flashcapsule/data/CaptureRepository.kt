@@ -1,6 +1,7 @@
 package com.flashcapsule.data
 
 import com.flashcapsule.ai.CapsuleEnricher
+import com.flashcapsule.data.db.AttachmentEntity
 import com.flashcapsule.data.db.CapsuleDao
 import com.flashcapsule.data.db.CapsuleEntity
 import com.flashcapsule.data.db.toEntity
@@ -31,6 +32,7 @@ class CaptureRepository(
     private val settings: Settings,
     private val scope: CoroutineScope,
     private val enricher: CapsuleEnricher? = null,
+    private val fileStore: FileStore? = null,
 ) {
     fun observeAll(): Flow<List<Capsule>> =
         dao.observeAll().map { list -> list.map(CapsuleEntity::toModel) }
@@ -144,6 +146,32 @@ class CaptureRepository(
         return sinks.dispatch(sinkId, e.toModel())
     }
 
+    // ---- 附件 ----
+    fun attachmentsFor(capsuleId: String): Flow<List<AttachmentEntity>> =
+        dao.attachmentsFor(capsuleId)
+
+    /** 拷贝源 uri 到私有目录并登记附件；返回是否成功。 */
+    suspend fun addAttachment(capsuleId: String, srcUri: android.net.Uri, mime: String?, sizeBytes: Long): Boolean {
+        val store = fileStore ?: return false
+        val name = store.queryDisplayName(srcUri) ?: "attachment_${System.currentTimeMillis()}"
+        val local = store.copyToAttachments(name, srcUri) ?: return false
+        dao.addAttachment(
+            AttachmentEntity(
+                id = UUID.randomUUID().toString(),
+                capsuleId = capsuleId,
+                uri = local.toString(),
+                mime = mime,
+                sizeBytes = sizeBytes,
+                createdAt = System.currentTimeMillis(),
+            )
+        )
+        return true
+    }
+
+    suspend fun deleteAttachment(id: String) {
+        dao.deleteAttachment(id)
+    }
+
     /**
      * AI 标题/分类：一次调用生成 title + colorTag + tags。
      * 三层去重防重复计费：① DB 里 title 非空即跳过（幂等标记）② 未配 key 跳过 ③ 进程内并发集合防双击。
@@ -167,6 +195,7 @@ class CaptureRepository(
                     title = result.title,
                     colorTag = result.colorTag?.name ?: cur.colorTag,
                     tags = if (result.tags.isNotEmpty()) result.tags.joinToString(",") else cur.tags,
+                    kind = result.kind,
                     updatedAt = System.currentTimeMillis(),
                 )
             )

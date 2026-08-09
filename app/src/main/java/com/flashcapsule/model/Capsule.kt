@@ -25,4 +25,6 @@ data class Capsule(
     val deletedAt: Long? = null,
     /** 已完成时间；null = 未完成（勾选完成时记录）。 */
     val doneAt: Long? = null,
+    /** AI 智能判断的类型：note / search / reminder / calendar（3.0 速记/搜索/指令）。 */
+    val kind: String = "",
 )

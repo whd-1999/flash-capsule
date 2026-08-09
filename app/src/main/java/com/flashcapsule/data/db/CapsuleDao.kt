@@ -51,4 +51,14 @@ interface CapsuleDao {
 
     @Query("DELETE FROM capsules WHERE deletedAt IS NOT NULL AND deletedAt < :cutoff")
     suspend fun purgeTrashBefore(cutoff: Long)
+
+    // ---- 附件 ----
+    @Query("SELECT * FROM attachments WHERE capsuleId = :capsuleId ORDER BY createdAt ASC")
+    fun attachmentsFor(capsuleId: String): Flow<List<AttachmentEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun addAttachment(a: AttachmentEntity)
+
+    @Query("DELETE FROM attachments WHERE id = :id")
+    suspend fun deleteAttachment(id: String)
 }

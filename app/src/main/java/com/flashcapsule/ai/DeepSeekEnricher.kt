@@ -67,7 +67,9 @@ class DeepSeekEnricher(private val settings: Settings) : CapsuleEnricher {
         val tags = j.optJSONArray("tags")?.let { arr ->
             (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }.take(3)
         } ?: emptyList()
-        return Enrichment(title, color, tags)
+        val kind = j.optString("kind", "note").trim().lowercase()
+            .let { if (it in setOf("note", "search", "reminder", "calendar")) it else "note" }
+        return Enrichment(title, color, tags, kind)
     }
 
     private fun extractJson(s: String): String {
@@ -79,8 +81,10 @@ class DeepSeekEnricher(private val settings: Settings) : CapsuleEnricher {
     companion object {
         private const val API = "https://api.deepseek.com/chat/completions"
         private const val SYSTEM_PROMPT =
-            "你是一个闪念胶囊整理助手。给定一条闪念内容，只输出一个 JSON 对象，不要任何其他文字、不要 markdown 代码块：" +
+            "你是一个闪念胶囊整理助手。给定一条闪念内容，判断它最像哪种（kind）：" +
+            "note=纯记录/备忘；search=想去搜索了解的内容；reminder=待办/要记住去做的事；calendar=有时间地点的事件。" +
+            "只输出一个 JSON 对象，不要任何其他文字、不要 markdown 代码块：" +
             "{\"title\":\"不超过12个字的中文摘要标题\",\"colorTag\":\"RED|ORANGE|YELLOW|GREEN|BLUE|PURPLE|GRAY 之一\"," +
-            "\"tags\":[\"短标签\"]}，tags 最多 3 个。"
+            "\"tags\":[\"短标签\"],\"kind\":\"note|search|reminder|calendar 之一\"}，tags 最多 3 个。"
     }
 }

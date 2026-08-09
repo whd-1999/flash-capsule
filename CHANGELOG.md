@@ -8,6 +8,15 @@
 - 语义搜索（embedding）
 - 同步（SyncProvider）
 
+## [0.17.0] - 2026-08-09
+### Added
+- **附件系统**（对齐原版 1.0）：展开胶囊「附件」按钮，选图片/文件存进胶囊；
+  附件区可点开（FileProvider）、可删；DB v4 attachments 表
+- **智能判断**（对齐原版 3.0）：AI 生成时额外判断类型 note/search/reminder/calendar，
+  展开面板顶部显示类型徽标（🔍搜索 / ⏰待办 / 📅事件）；DB v5 kind 列
+### Changed
+- versionCode/versionName → 20 / 0.17.0
+
 ## [0.16.0] - 2026-08-09
 ### Added
 - **ContentProvider 读接口**：`content://com.flashcapsule.provider/capsules?since=<epoch>`

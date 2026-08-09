@@ -39,4 +39,5 @@ Kotlin · Jetpack Compose · Room · whisper.cpp（端上，NDK/CMake）· 手�
 - **v0.14** ✅ 播放控制条 + 把手左右切换
 - **v0.15** ✅ ObsidianSink SAF 目录选择器（直接落 vault）
 - **v0.16** ✅ ContentProvider + 置顶 + 待办提醒 + 把手水平拖动换边
+- **v0.17** ✅ 附件系统 + 智能判断（速记/搜索/指令）
 - **待做** ⏳：SAF 直接落 vault、ContentProvider 读接口、语义搜索 + 同步

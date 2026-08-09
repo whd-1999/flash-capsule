@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.room.Room
 import com.flashcapsule.ai.DeepSeekEnricher
 import com.flashcapsule.data.CaptureRepository
+import com.flashcapsule.data.FileStore
 import com.flashcapsule.data.Settings
 import com.flashcapsule.data.db.AppDatabase
 import com.flashcapsule.sink.ObsidianSink
@@ -29,8 +30,9 @@ class FlashCapsuleApp : Application() {
         super.onCreate()
         settings = Settings(this)
         val db = Room.databaseBuilder(this, AppDatabase::class.java, "flashcapsule.db")
-            .addMigrations(AppDatabase.MIGRATION_2_3)
+            .addMigrations(AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5)
             .build()
+        val fileStore = FileStore(this)
         val sinks = SinkRegistry(
             listOf(
                 ObsidianSink(this, settings, auto = false), // 需要自动落 vault 时改 auto = true
@@ -45,6 +47,7 @@ class FlashCapsuleApp : Application() {
             settings = settings,
             scope = appScope,
             enricher = DeepSeekEnricher(settings),
+            fileStore = fileStore,
         )
         // 回收站 30 天惰性清理（启动时跑，每日最多一次）
         appScope.launch { repository.purgeExpiredTrash() }

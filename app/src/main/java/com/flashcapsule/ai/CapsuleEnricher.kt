@@ -14,4 +14,6 @@ data class Enrichment(
     val title: String,
     val colorTag: ColorTag?,
     val tags: List<String>,
+    /** 智能判断：note / search / reminder / calendar。 */
+    val kind: String = "note",
 )

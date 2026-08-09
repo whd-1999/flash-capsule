@@ -40,6 +40,9 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.AlarmOff
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -58,9 +61,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -70,13 +77,16 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.flashcapsule.FlashCapsuleApp
 import com.flashcapsule.capture.AudioPlayer
+import com.flashcapsule.data.db.AttachmentEntity
 import com.flashcapsule.model.Capsule
 import com.flashcapsule.model.CapsuleStatus
 import com.flashcapsule.model.ColorTag
 import com.flashcapsule.transcribe.TranscriptionState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -345,6 +355,20 @@ fun CapsuleSheet(
     var title by remember(capsule.id) { mutableStateOf(capsule.title) }
     var color by remember(capsule.id) { mutableStateOf(capsule.colorTag) }
     var showReminderPicker by remember(capsule.id) { mutableStateOf(false) }
+    var showAttachMenu by remember(capsule.id) { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val app = FlashCapsuleApp.from(context)
+    val scope = rememberCoroutineScope()
+    val attachments by app.repository.attachmentsFor(capsule.id).collectAsState(initial = emptyList())
+    fun addFrom(uri: android.net.Uri?) {
+        uri ?: return
+        scope.launch {
+            val mime = runCatching { context.contentResolver.getType(uri) }.getOrNull()
+            app.repository.addAttachment(capsule.id, uri, mime, 0L)
+        }
+    }
+    val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { addFrom(it) }
 
     Box(
         modifier = Modifier
@@ -374,6 +398,19 @@ fun CapsuleSheet(
                     }
                 }
                 Spacer(Modifier.height(14.dp))
+                if (capsule.kind.isNotBlank() && capsule.kind != "note") {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = kindLabel(capsule.kind),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SheetSub,
+                            modifier = Modifier
+                                .background(capsuleColorOf(ColorTag.BLUE).copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -427,6 +464,24 @@ fun CapsuleSheet(
                         }
                     }
                 }
+                if (attachments.isNotEmpty() || showAttachMenu) {
+                    Spacer(Modifier.height(10.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        attachments.forEach { a ->
+                            AttachmentRow(
+                                attachment = a,
+                                onClick = { openAttachment(context, a) },
+                                onDelete = { scope.launch { app.repository.deleteAttachment(a.id) } },
+                            )
+                        }
+                        if (showAttachMenu) {
+                            TextButton(onClick = { pickFile.launch("*/*"); showAttachMenu = false }) {
+                                Icon(Icons.Filled.AttachFile, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp)); Text("添加附件（图片/文件）")
+                            }
+                        }
+                    }
+                }
                 Spacer(Modifier.height(14.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (onEnrich != null) {
@@ -447,6 +502,9 @@ fun CapsuleSheet(
                             contentDescription = "提醒",
                             tint = if (capsule.reminderAt != null) MaterialTheme.colorScheme.primary else SheetSub,
                         )
+                    }
+                    IconButton(onClick = { showAttachMenu = !showAttachMenu }) {
+                        Icon(Icons.Filled.AttachFile, contentDescription = "附件", tint = SheetSub)
                     }
                     IconButton(onClick = { onShare(text) }) { Icon(Icons.Filled.Share, "分享") }
                     IconButton(onClick = onObsidian) { Icon(Icons.Filled.Description, "落 Obsidian") }
@@ -521,6 +579,67 @@ private fun tomorrow9(): Long {
     cal.set(java.util.Calendar.SECOND, 0)
     cal.set(java.util.Calendar.MILLISECOND, 0)
     return cal.timeInMillis
+}
+
+/** 附件行：文件名 + 删除。点击用 FileProvider 打开。 */
+@Composable
+private fun AttachmentRow(
+    attachment: AttachmentEntity,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0x14000000))
+            .clickable(onClick = onClick)
+            .padding(start = 10.dp, top = 6.dp, bottom = 6.dp, end = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (attachment.mime?.startsWith("image/") == true) Icons.Filled.Image else Icons.Filled.AttachFile,
+            contentDescription = null,
+            tint = SheetSub,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = fileName(attachment.uri),
+            style = MaterialTheme.typography.bodySmall,
+            color = SheetText,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Filled.Close, contentDescription = "删除附件", tint = SheetSub, modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+private fun fileName(uri: String): String =
+    uri.substringAfterLast('/').substringAfterLast('_').let { if (it.length > 2) it else uri }
+
+private fun kindLabel(kind: String): String = when (kind) {
+    "search" -> "🔍 搜索"
+    "reminder" -> "⏰ 待办提醒"
+    "calendar" -> "📅 事件"
+    else -> ""
+}
+
+private fun openAttachment(context: android.content.Context, a: AttachmentEntity) {
+    runCatching {
+        val f = java.io.File(android.net.Uri.parse(a.uri).path ?: return)
+        if (!f.exists()) return
+        val providerUri = androidx.core.content.FileProvider.getUriForFile(
+            context, "com.flashcapsule.fileprovider", f)
+        val intent = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(providerUri, a.mime ?: "*/*")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    }
 }
 
 @Composable

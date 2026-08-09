@@ -95,6 +95,10 @@ class InboxViewModel(
     fun enrich(id: String) = viewModelScope.launch { repo.enrich(id, force = true) }
     fun togglePin(id: String) = viewModelScope.launch { repo.togglePin(id) }
     fun setReminder(id: String, time: Long?) = viewModelScope.launch { repo.setReminder(id, time) }
+    fun attachmentsFor(id: String) = repo.attachmentsFor(id)
+    fun addAttachment(id: String, uri: android.net.Uri, mime: String?, sizeBytes: Long) =
+        viewModelScope.launch { repo.addAttachment(id, uri, mime, sizeBytes) }
+    fun deleteAttachment(id: String) = viewModelScope.launch { repo.deleteAttachment(id) }
     fun export(sinkId: String, id: String) = viewModelScope.launch { repo.exportTo(sinkId, id) }
 
     class Factory(

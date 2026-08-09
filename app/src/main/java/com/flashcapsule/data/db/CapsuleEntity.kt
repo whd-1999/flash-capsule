@@ -23,6 +23,7 @@ data class CapsuleEntity(
     val title: String? = null,
     val deletedAt: Long? = null,
     val doneAt: Long? = null,
+    val kind: String? = null,
 )
 
 fun CapsuleEntity.toModel(): Capsule = Capsule(
@@ -42,6 +43,7 @@ fun CapsuleEntity.toModel(): Capsule = Capsule(
     title = title ?: "",
     deletedAt = deletedAt,
     doneAt = doneAt,
+    kind = kind ?: "",
 )
 
 fun Capsule.toEntity(): CapsuleEntity = CapsuleEntity(
@@ -60,4 +62,5 @@ fun Capsule.toEntity(): CapsuleEntity = CapsuleEntity(
     title = title,
     deletedAt = deletedAt,
     doneAt = doneAt,
+    kind = kind,
 )

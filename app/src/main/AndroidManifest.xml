@@ -94,6 +94,17 @@
             android:exported="true"
             android:readPermission="com.flashcapsule.permission.READ_CAPSULES" />
 
+        <!-- 附件文件共享（打开附件用） -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.flashcapsule.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- 数字助理：设为默认助理后，长按电源/侧边键的助理手势即唤起语音捕获 -->
         <service
             android:name=".assist.CaptureVoiceInteractionService"
