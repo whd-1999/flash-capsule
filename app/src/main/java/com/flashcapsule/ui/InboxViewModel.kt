@@ -39,6 +39,9 @@ class InboxViewModel(
     private val _apiKey = MutableStateFlow(settings.apiKey)
     val apiKey: StateFlow<String> = _apiKey
 
+    private val _aiError = MutableStateFlow(settings.aiError)
+    val aiError: StateFlow<String> = _aiError
+
     val capsules: StateFlow<List<Capsule>> =
         combine(query, filter) { q, f -> q to f }
             .flatMapLatest { (q, f) ->

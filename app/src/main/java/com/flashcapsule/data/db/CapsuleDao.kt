@@ -11,8 +11,12 @@ interface CapsuleDao {
     @Query("SELECT * FROM capsules WHERE deletedAt IS NULL ORDER BY pinned DESC, createdAt DESC")
     fun observeAll(): Flow<List<CapsuleEntity>>
 
-    @Query("SELECT * FROM capsules WHERE deletedAt IS NULL AND (text LIKE '%' || :q || '%' OR title LIKE '%' || :q || '%') ORDER BY pinned DESC, createdAt DESC")
+    @Query("SELECT * FROM capsules WHERE deletedAt IS NULL AND (text LIKE '%' || :q || '%' OR title LIKE '%' || :q || '%' OR tags LIKE '%' || :q || '%') ORDER BY pinned DESC, createdAt DESC")
     fun search(q: String): Flow<List<CapsuleEntity>>
+
+    /** 有文字但还没 AI 标题的胶囊（启动时补标题用）。 */
+    @Query("SELECT * FROM capsules WHERE deletedAt IS NULL AND text != '' AND (title IS NULL OR title = '') ORDER BY createdAt DESC")
+    suspend fun untitled(): List<CapsuleEntity>
 
     /** 回收站：只显示软删的。 */
     @Query("SELECT * FROM capsules WHERE deletedAt IS NOT NULL ORDER BY deletedAt DESC")

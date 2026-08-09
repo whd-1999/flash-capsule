@@ -48,6 +48,8 @@ class FlashCapsuleApp : Application() {
         )
         // 回收站 30 天惰性清理（启动时跑，每日最多一次）
         appScope.launch { repository.purgeExpiredTrash() }
+        // 给旧胶囊补 AI 标题（节流，每小时最多一次）
+        appScope.launch { repository.enrichPending() }
     }
 
     companion object {

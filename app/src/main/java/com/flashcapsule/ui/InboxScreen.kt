@@ -84,6 +84,7 @@ fun InboxScreen(
     val query by vm.search.collectAsState()
     val lang by vm.lang.collectAsState()
     val apiKey by vm.apiKey.collectAsState()
+    val aiError by vm.aiError.collectAsState()
     val filter by vm.filterState.collectAsState()
     val trash by vm.trash.collectAsState()
     var showLangDialog by remember { mutableStateOf(false) }
@@ -244,6 +245,7 @@ fun InboxScreen(
     if (showSettings) {
         SettingsDialog(
             apiKey = apiKey,
+            aiError = aiError,
             onSave = { vm.setApiKey(it); showSettings = false },
             onDismiss = { showSettings = false },
         )
@@ -403,7 +405,12 @@ private fun TrashCard(
 }
 
 @Composable
-private fun SettingsDialog(apiKey: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+private fun SettingsDialog(
+    apiKey: String,
+    aiError: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
     var key by remember { mutableStateOf(apiKey) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -422,6 +429,14 @@ private fun SettingsDialog(apiKey: String, onSave: (String) -> Unit, onDismiss: 
                     placeholder = { Text("sk-...") },
                     singleLine = true,
                 )
+                if (aiError.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "最近一次 AI 失败：$aiError",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFD32F2F),
+                    )
+                }
             }
         },
         confirmButton = {

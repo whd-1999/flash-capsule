@@ -159,6 +159,21 @@ class CaptureRepository(
         }
     }
 
+    /**
+     * 给旧胶囊补 AI 标题：text 非空但 title 空的，节流批量补。
+     * 这样 v0.13 之前存的旧胶囊也能自动出标题。
+     */
+    suspend fun enrichPending(limit: Int = 10) {
+        if (settings.apiKey.isBlank()) return
+        val last = settings.lastAutoEnrichAt
+        if (System.currentTimeMillis() - last < AUTO_ENRICH_INTERVAL_MS) return
+        val pending = dao.untitled().take(limit)
+        if (pending.isNotEmpty()) {
+            pending.forEach { enrich(it.id) }
+            settings.lastAutoEnrichAt = System.currentTimeMillis()
+        }
+    }
+
     /** 回收站 30 天清理：App 启动时惰性调用，每日最多一次（不引后台任务）。 */
     suspend fun purgeExpiredTrash(force: Boolean = false) {
         val last = settings.lastTrashPurgeAt
@@ -175,5 +190,6 @@ class CaptureRepository(
         private const val TRASH_TTL_MS = 30L * 24 * 3600 * 1000   // 30 天
         private const val PURGE_INTERVAL_MS = 24L * 3600 * 1000   // 每天最多跑一次
         private const val ENRICH_MAX_CHARS = 2000
+        private const val AUTO_ENRICH_INTERVAL_MS = 60L * 60 * 1000 // 补标题每小时最多一次
     }
 }

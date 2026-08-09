@@ -46,11 +46,23 @@ class Settings(context: Context) {
         get() = prefs.getLong(KEY_LAST_PURGE, 0L)
         set(value) { prefs.edit().putLong(KEY_LAST_PURGE, value).apply() }
 
+    /** 最近一次 AI 标题生成失败原因（空 = 无失败）。UI 可显示。 */
+    var aiError: String
+        get() = prefs.getString(KEY_AI_ERROR, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_AI_ERROR, value).apply() }
+
+    /** 上次给旧胶囊批量补标题的时间，用于节流。 */
+    var lastAutoEnrichAt: Long
+        get() = prefs.getLong(KEY_AUTO_ENRICH, 0L)
+        set(value) { prefs.edit().putLong(KEY_AUTO_ENRICH, value).apply() }
+
     companion object {
         private const val KEY_LANG = "stt_language"
         private const val KEY_OVERLAY = "overlay_enabled"
         private const val KEY_HANDLE_Y = "handle_y"
         private const val KEY_API_KEY = "api_key"
         private const val KEY_LAST_PURGE = "last_trash_purge"
+        private const val KEY_AI_ERROR = "ai_error"
+        private const val KEY_AUTO_ENRICH = "auto_enrich_at"
     }
 }
